@@ -1,5 +1,6 @@
 import React from "react"
 import { Button } from "@/components/ui"
+import { useTheme } from "@/theme"
 import Card, {
   CardHeader,
   CardTitle,
@@ -9,6 +10,7 @@ import Card, {
 } from "@/components/ui/card"
 
 export default function Landing() {
+  const { theme, toggleTheme } = useTheme()
   return (
     <main className="min-h-screen bg-linear-to-b from-slate-950 via-slate-950 to-slate-900 text-slate-50">
       {/* Nav */}
@@ -32,6 +34,18 @@ export default function Landing() {
           </nav>
 
           <div className="flex items-center gap-2 text-xs">
+            <button
+              type="button"
+              onClick={toggleTheme}
+              className="flex h-8 items-center gap-1 rounded-full border border-white/10 bg-slate-900/60 px-2 text-[11px] text-slate-300 shadow-sm transition-colors hover:border-white/30"
+            >
+              <span
+                className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-slate-800 text-[11px]"
+              >
+                {theme === "dark" ? "🌙" : "☀️"}
+              </span>
+              <span className="hidden sm:inline">{theme === "dark" ? "Dark" : "Light"} mode</span>
+            </button>
             <Button variant="ghost" className="h-8 px-3 text-xs">
               Log in
             </Button>
