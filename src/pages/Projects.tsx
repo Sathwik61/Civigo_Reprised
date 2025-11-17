@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui"
 import { useEffect, useState } from "react"
 import { ProjectDialog } from "@/components/dialog/projectDialog"
+import { ConfirmDialog } from "@/components/dialog/confirmDialog";
 import {
     getAllLocalProjects,
     addLocalProject,
@@ -17,6 +18,8 @@ export default function Projects() {
     const [dialogOpen, setDialogOpen] = useState(false)
     const [projects, setProjects] = useState<ProjectRecord[]>([]);
     const [editingProject, setEditingProject] = useState<ProjectRecord | null>(null);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [projectToDelete, setProjectToDelete] = useState<ProjectRecord | null>(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -88,13 +91,17 @@ export default function Projects() {
         setDialogOpen(true);
     };
 
-    const handleDeleteClick = async (project: ProjectRecord) => {
-        const confirmed = window.confirm("Are you sure you want to delete this project?");
-        if (!confirmed || project.id == null) return;
+    const handleDeleteClick = (project: ProjectRecord) => {
+        setProjectToDelete(project);
+        setConfirmOpen(true);
+    };
 
-        await projectsDB.projects.delete(project.id);
+    const handleConfirmDelete = async () => {
+        if (!projectToDelete || projectToDelete.id == null) return;
+        await projectsDB.projects.delete(projectToDelete.id);
         const updated = await getAllLocalProjects();
         setProjects(updated);
+        setProjectToDelete(null);
     };
 
     return (
@@ -158,6 +165,18 @@ export default function Projects() {
                     status: editingProject.status,
                     clientdetails: editingProject.clientdetails,
                 } : undefined}
+            />
+
+            <ConfirmDialog
+                open={confirmOpen}
+                onOpenChange={(open) => {
+                    if (!open) setProjectToDelete(null);
+                    setConfirmOpen(open);
+                }}
+                title="Delete this project?"
+                description="This will remove the project from your local data."
+                confirmLabel="Delete"
+                onConfirm={handleConfirmDelete}
             />
         </main>
     )

@@ -3,7 +3,7 @@ import { apiFetch } from "./client";
 export interface WorkPayload {
   name: string;
   description: string;
-  clientDetails: Record<string, unknown>;
+  projectId: string;
 }
 
 export interface Work extends WorkPayload {
