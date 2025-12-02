@@ -4,10 +4,17 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui";
 import type { ItemPayload } from "@/services/api/subwork";
 import { listSubworks } from "@/services/api/subwork";
-import { getLocalEntriesForSubwork, fullSubworkEntriesSync } from "@/services/dbservices/subworkEntryLocal";
+import {
+  getLocalEntriesForSubwork,
+  fullSubworkEntriesSync,
+  addLocalEntry,
+  updateLocalEntry,
+  markEntryDeletedLocal,
+} from "@/services/dbservices/subworkEntryLocal";
 
 interface Row extends ItemPayload {
   id: string;
+  localId?: number; // Dexie id for offline persistence
   number?: number;
   length?: number;
   breadth?: number;
@@ -43,6 +50,7 @@ export default function SubworkDetails() {
 
       const mappedAdditions: Row[] = localAdd.map((e) => ({
         id: String(e.id ?? e.backendId ?? ""),
+        localId: e.id,
         name: e.name,
         number: e.number,
         length: e.length,
@@ -54,6 +62,7 @@ export default function SubworkDetails() {
 
       const mappedDeductions: Row[] = localDed.map((e) => ({
         id: String(e.id ?? e.backendId ?? ""),
+        localId: e.id,
         name: e.name,
         number: e.number,
         length: e.length,
@@ -80,6 +89,7 @@ export default function SubworkDetails() {
             recalculateRows(
               syncedAdd.map((e) => ({
                 id: String(e.id ?? e.backendId ?? ""),
+                localId: e.id,
                 name: e.name,
                 number: e.number,
                 length: e.length,
@@ -97,6 +107,7 @@ export default function SubworkDetails() {
             recalculateRows(
               syncedDed.map((e) => ({
                 id: String(e.id ?? e.backendId ?? ""),
+                localId: e.id,
                 name: e.name,
                 number: e.number,
                 length: e.length,
@@ -126,38 +137,58 @@ export default function SubworkDetails() {
   }, [unit, ratePerUnit]);
 
   const handleAddRow = (type: "details" | "deductions") => {
+    const makeBaseRow = (id: string): Row => ({
+      id,
+      localId: undefined,
+      name: "",
+      number: 1,
+      length: 0,
+      breadth: 0,
+      depth: 0,
+    });
+
+    const createLocal = async (tempId: string) => {
+      if (!subworkId) return;
+      const kindKey = type;
+      const base: Omit<import("@/db/projectsDB").SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId"> = {
+        subworkBackendId: subworkId,
+        subworkLocalId: undefined,
+        kind: kindKey,
+        name: "",
+        number: 1,
+        length: 0,
+        breadth: 0,
+        depth: 0,
+        quantity: 0,
+        rate: ratePerUnit,
+        total: 0,
+        deleted: false,
+      };
+      const nowId = await addLocalEntry(base as any);
+      // patch the just-created row with its Dexie id so future edits/deletes persist
+      const updater = (rows: Row[]): Row[] =>
+        rows.map((r) => (r.id === tempId ? { ...r, localId: nowId as number } : r));
+      if (type === "details") {
+        setAdditions((prev) => updater(prev));
+      } else {
+        setDeductions((prev) => updater(prev));
+      }
+    };
+
     if (type === "details") {
-      setAdditions((prev) => [
-        ...prev,
-        recalculateRow(
-          {
-            id: `temp-${prev.length + 1}`,
-            name: "",
-            number: 1,
-            length: 0,
-            breadth: 0,
-            depth: 0,
-          },
-          unit,
-          ratePerUnit,
-        ),
-      ]);
+      setAdditions((prev) => {
+        const tempId = `local-${Date.now()}-${prev.length + 1}`;
+        const next = [...prev, recalculateRow(makeBaseRow(tempId), unit, ratePerUnit)];
+        void createLocal(tempId);
+        return next;
+      });
     } else {
-      setDeductions((prev) => [
-        ...prev,
-        recalculateRow(
-          {
-            id: `temp-${prev.length + 1}`,
-            name: "",
-            number: 1,
-            length: 0,
-            breadth: 0,
-            depth: 0,
-          },
-          unit,
-          ratePerUnit,
-        ),
-      ]);
+      setDeductions((prev) => {
+        const tempId = `local-${Date.now()}-${prev.length + 1}`;
+        const next = [...prev, recalculateRow(makeBaseRow(tempId), unit, ratePerUnit)];
+        void createLocal(tempId);
+        return next;
+      });
     }
   };
 
@@ -200,9 +231,45 @@ export default function SubworkDetails() {
     };
 
     if (type === "details") {
-      setAdditions((prev) => updater(prev, "additions"));
+      setAdditions((prev) => {
+        const updatedRows = updater(prev, "additions");
+        const updated = updatedRows.find((r) => r.id === id);
+        if (updated && updated.localId != null) {
+          void updateLocalEntry(
+            { id: updated.localId } as any,
+            {
+              name: updated.name as any,
+              number: updated.number,
+              length: updated.length,
+              breadth: updated.breadth,
+              depth: updated.depth,
+              quantity: updated.quantity,
+              total: updated.total,
+            },
+          );
+        }
+        return updatedRows;
+      });
     } else {
-      setDeductions((prev) => updater(prev, "deductions"));
+      setDeductions((prev) => {
+        const updatedRows = updater(prev, "deductions");
+        const updated = updatedRows.find((r) => r.id === id);
+        if (updated && updated.localId != null) {
+          void updateLocalEntry(
+            { id: updated.localId } as any,
+            {
+              name: updated.name as any,
+              number: updated.number,
+              length: updated.length,
+              breadth: updated.breadth,
+              depth: updated.depth,
+              quantity: updated.quantity,
+              total: updated.total,
+            },
+          );
+        }
+        return updatedRows;
+      });
     }
   };
 
@@ -211,10 +278,18 @@ export default function SubworkDetails() {
       setAdditions((prev) =>
         recalculateRows(prev.filter((r) => r.id !== id), unit, ratePerUnit, "additions"),
       );
+      const row = additions.find((r) => r.id === id);
+      if (row && row.localId != null) {
+        void markEntryDeletedLocal({ id: row.localId } as any);
+      }
     } else {
       setDeductions((prev) =>
         recalculateRows(prev.filter((r) => r.id !== id), unit, ratePerUnit, "deductions"),
       );
+      const row = deductions.find((r) => r.id === id);
+      if (row && row.localId != null) {
+        void markEntryDeletedLocal({ id: row.localId } as any);
+      }
     }
   };
 

@@ -14,9 +14,12 @@ export async function getLocalEntriesForSubwork(
     .toArray();
 }
 
-export async function addLocalEntry(entry: Omit<SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId">) {
+export async function addLocalEntry(
+  entry: Omit<SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId">,
+) {
   const now = Date.now();
-  await projectsDB.subworkEntries.add({ ...entry, synced: false, updatedAt: now });
+  // Dexie add() returns the generated primary key (id)
+  return projectsDB.subworkEntries.add({ ...entry, synced: false, updatedAt: now });
 }
 
 export async function updateLocalEntry(record: SubworkEntryRecord, updates: Partial<SubworkEntryRecord>) {
