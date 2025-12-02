@@ -30,19 +30,19 @@ export function AppShell() {
                             </span>
                             <span className="hidden sm:inline">{theme === "dark" ? "Light" : "Dark"} mode</span>
                         </button>
-                        {!isLoggedIn ? (
+                        {isLoggedIn ? (
                             <>
-                                <Button asChild variant="outline" size="sm" className="hidden text-xs sm:inline-flex">
+                             <Button asChild variant="destructive" size="sm" className="hidden text-xs sm:inline-flex">
+                                <Link to="/login" onClick={()=>{useAuthStore.getState().clearAuth();clearStoredToken()}}>Logout</Link>
+                            </Button>
+                            </>
+                        ) : (<>
+                              <Button asChild variant="outline" size="sm" className="hidden text-xs sm:inline-flex">
                                     <Link to="/login">Log in</Link>
                                 </Button>
                                 <Button asChild size="sm" className="text-xs">
                                     <Link to="/signup">Get started</Link>
-                                </Button>
-                            </>
-                        ) : (<>
-                                 <Button asChild variant="destructive" size="sm" className="hidden text-xs sm:inline-flex">
-                                    <Link to="/login" onClick={()=>{useAuthStore.getState().clearAuth();clearStoredToken()}}>Logout</Link>
-                                </Button>
+                                </Button>  
                         </>)}
                     </div>
                 </div>

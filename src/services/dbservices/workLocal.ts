@@ -61,6 +61,8 @@ export async function syncWorksToServer() {
 export async function updateLocalWork(record: WorkRecord, updates: Partial<Pick<WorkRecord, "name" | "description">>) {
   if (!record.id) return;
   const now = Date.now();
+  // how to parse the string to a number.  parseInt 
+  // const wId:number  = record.synced?parseInt(record.backendId):record.id;
   await projectsDB.works.update(record.id, {
     ...record,
     ...updates,

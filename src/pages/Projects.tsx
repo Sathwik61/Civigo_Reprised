@@ -8,6 +8,7 @@ import {
     addLocalProject,
     fullSync,
     syncToServer,
+    markProjectDeletedLocal,
 } from "@/services/dbservices/projectLocal";
 import { projectsDB } from "@/db/projectsDB";
 import type { ProjectRecord } from "@/db/projectsDB";
@@ -98,9 +99,21 @@ export default function Projects() {
 
     const handleConfirmDelete = async () => {
         if (!projectToDelete || projectToDelete.id == null) return;
-        await projectsDB.projects.delete(projectToDelete.id);
+        // mark as deleted locally (soft delete); syncToServer will
+        // later propagate this to the backend when online
+        await markProjectDeletedLocal(projectToDelete.id);
+
+        // refresh UI from Dexie
         const updated = await getAllLocalProjects();
         setProjects(updated);
+
+        // if online now, push deletion immediately
+        if (navigator.onLine) {
+            await syncToServer();
+            const synced = await getAllLocalProjects();
+            setProjects(synced);
+        }
+
         setProjectToDelete(null);
     };
 
@@ -120,6 +133,18 @@ export default function Projects() {
                             key={project.id}
                             className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-xs dark:border-white/10 dark:bg-slate-900/70"
                         >
+                            <div className="mx-3">
+                                <span
+                                    className={
+                                        `inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px]` +
+                                        (project.synced
+                                            ? " bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-300"
+                                            : " bg-red-500/10 text-red-600 dark:bg-red-400/20 dark:text-red-300")
+                                    }
+                                >
+                                    ●
+                                </span>
+                            </div>
                             <div className="flex-1">
                                 <button
                                     type="button"

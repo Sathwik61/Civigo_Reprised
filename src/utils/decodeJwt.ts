@@ -33,11 +33,22 @@ export function getRoleFromJwt(token: string): string | null {
   return payload.role;
 }
 
+export function getIdFromJwt(token: string): string | null {
+  const payload = decodeJwt(token);
+  if (!payload) {
+    return null;
+  }
+
+  if (typeof payload.user_id === "string") {
+    return payload.user_id;
+  }
+
+  return null;
+}
 export function isJwtExpired(token: string): boolean {
   try {
     const payload = decodeJwt(token);
 
-    // If payload or exp is missing → treat as expired
     if (!payload || typeof payload.exp !== "number") {
       return true;
     }

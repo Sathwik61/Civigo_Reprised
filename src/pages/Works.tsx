@@ -59,7 +59,7 @@ export default function Works() {
     if (!projectId) return;
 
     if (editingWork) {
-      await updateLocalWork(editingWork, {
+      await  updateLocalWork(editingWork, {
         name: values.name,
         description: values.description,
       });
@@ -70,7 +70,7 @@ export default function Works() {
         name: values.name,
         description: values.description,
       });
-    }
+      }
 
     const updated = await getLocalWorksForProject({ backendId: projectId });
     setWorks(updated);
@@ -113,9 +113,21 @@ export default function Works() {
         <div className="space-y-2 text-sm">
           {works.map((work) => (
             <div
-              key={work.id}
+              key={work.id?work.id:work.backendId}
               className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-xs dark:border-white/10 dark:bg-slate-900/70"
             >
+              <div className="mx-3">
+                                <span
+                                    className={
+                                        `inline-flex h-4 w-4 items-center justify-center rounded-full text-[10px]` +
+                                        (work.synced
+                                            ? " bg-emerald-500/10 text-emerald-600 dark:bg-emerald-400/20 dark:text-emerald-300"
+                                            : " bg-red-500/10 text-red-600 dark:bg-red-400/20 dark:text-red-300")
+                                    }
+                                >
+                                    ●
+                                </span>
+                            </div>
               <Link
                 to={`/works/${work.id}/subworks`}
                 className="flex-1 text-left hover:text-primary"

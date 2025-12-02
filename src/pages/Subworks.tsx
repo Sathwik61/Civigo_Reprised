@@ -1,13 +1,101 @@
-import { Link, useParams } from "react-router-dom"
-import { Button } from "@/components/ui"
-
-const mockSubworks = [
-  { id: "100", name: "Rebar & Steel" },
-  { id: "101", name: "Concrete Pouring" },
-]
+import { Link, useParams } from "react-router-dom";
+import { Button } from "@/components/ui";
+import { useEffect, useState } from "react";
+import type { SubworkRecord } from "@/db/projectsDB";
+import {
+  addLocalSubwork,
+  getLocalSubworksForWork,
+  syncSubworksFromServer,
+  syncSubworksToServer,
+  updateLocalSubwork,
+  deleteLocalSubwork,
+} from "@/services/dbservices/subworkLocal";
+import { SubworkDialog } from "@/components/dialog/subworkDialog";
+import { ConfirmDialog } from "@/components/dialog/confirmDialog";
 
 export default function Subworks() {
-  const { workId } = useParams()
+  const { workId } = useParams(); // backend work id
+  const [subworks, setSubworks] = useState<SubworkRecord[]>([]);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingSubwork, setEditingSubwork] = useState<SubworkRecord | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [subworkToDelete, setSubworkToDelete] = useState<SubworkRecord | null>(null);
+
+  useEffect(() => {
+    if (!workId) return;
+    let cancelled = false;
+
+    async function init() {
+      const local = await getLocalSubworksForWork({ backendId: workId });
+      if (!cancelled) setSubworks(local);
+
+      if (navigator.onLine) {
+        await syncSubworksToServer();
+        await syncSubworksFromServer();
+        const synced = await getLocalSubworksForWork({ backendId: workId });
+        if (!cancelled) setSubworks(synced);
+      }
+    }
+
+    init();
+
+    const onOnline = async () => {
+      await syncSubworksToServer();
+      await syncSubworksFromServer();
+      const data = await getLocalSubworksForWork({ backendId: workId });
+      if (!cancelled) setSubworks(data);
+    };
+
+    window.addEventListener("online", onOnline);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener("online", onOnline);
+    };
+  }, [workId]);
+
+  const handleSubworkSubmit = async (values: { name: string; description?: string }) => {
+    if (!workId) return;
+
+    if (editingSubwork) {
+      await updateLocalSubwork(editingSubwork, {
+        name: values.name,
+        description: values.description,
+      });
+    } else {
+      await addLocalSubwork({
+        workBackendId: workId,
+        workLocalId: undefined,
+        name: values.name,
+        description: values.description,
+      });
+    }
+
+    const updated = await getLocalSubworksForWork({ backendId: workId });
+    setSubworks(updated);
+
+    if (navigator.onLine) {
+      await syncSubworksToServer();
+      await syncSubworksFromServer();
+      const synced = await getLocalSubworksForWork({ backendId: workId });
+      setSubworks(synced);
+    }
+
+    setEditingSubwork(null);
+  };
+
+  const handleDeleteClick = (subwork: SubworkRecord) => {
+    setSubworkToDelete(subwork);
+    setConfirmOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!subworkToDelete || !subworkToDelete.id || !workId) return;
+    await deleteLocalSubwork(subworkToDelete);
+    const updated = await getLocalSubworksForWork({ backendId: workId });
+    setSubworks(updated);
+    setSubworkToDelete(null);
+  };
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
@@ -15,22 +103,73 @@ export default function Subworks() {
         <div className="mb-2 text-[11px] text-slate-500 dark:text-slate-400">Work #{workId}</div>
         <div className="mb-6 flex items-center justify-between">
           <h1 className="text-lg font-semibold tracking-tight">Subworks</h1>
-          <Button className="h-8 px-3 text-xs">Add Subwork</Button>
+          <Button className="h-8 px-3 text-xs" onClick={() => setDialogOpen(true)}>
+            Add Subwork
+          </Button>
         </div>
 
         <div className="space-y-2 text-sm">
-          {mockSubworks.map((subwork) => (
-            <Link
+          {subworks.map((subwork) => (
+            <div
               key={subwork.id}
-              to={`/subworks/${subwork.id}/details`}
-              className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-xs hover:border-primary/60 hover:bg-slate-100 dark:border-white/10 dark:bg-slate-900/70 dark:hover:bg-slate-900"
+              className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-xs dark:border-white/10 dark:bg-slate-900/70"
             >
-              <span>{subwork.name}</span>
-              <span className="text-slate-500 dark:text-slate-400">View details →</span>
-            </Link>
+              <Link
+                to={`/subworks/${subwork.id}/details`}
+                className="flex-1 text-left hover:text-primary"
+              >
+                <span>{subwork.name}</span>
+              </Link>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => {
+                    setEditingSubwork(subwork);
+                    setDialogOpen(true);
+                  }}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  className="text-xs"
+                  onClick={() => handleDeleteClick(subwork)}
+                >
+                  Delete
+                </Button>
+              </div>
+            </div>
           ))}
         </div>
       </div>
+
+      <SubworkDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
+          if (!open) setEditingSubwork(null);
+          setDialogOpen(open);
+        }}
+        onSubmit={handleSubworkSubmit}
+        initialValues={editingSubwork ? {
+          name: editingSubwork.name,
+          description: editingSubwork.description,
+        } : undefined}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={(open) => {
+          if (!open) setSubworkToDelete(null);
+          setConfirmOpen(open);
+        }}
+        title="Delete this subwork?"
+        description="This will remove the subwork from your local data."
+        confirmLabel="Delete"
+        onConfirm={handleConfirmDelete}
+      />
     </main>
-  )
+  );
 }

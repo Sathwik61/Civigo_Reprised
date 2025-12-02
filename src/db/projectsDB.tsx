@@ -13,6 +13,7 @@ export interface ProjectRecord {
   };
   synced: boolean;          // false = needs upload
   updatedAt: number;
+  deleted?: boolean;        // soft-delete marker for sync
 }
 
 export interface WorkRecord {
@@ -26,15 +27,28 @@ export interface WorkRecord {
   updatedAt: number;
 }
 
+export interface SubworkRecord {
+  id?: number;               // local auto-id
+  backendId?: string;        // id from API when synced
+  workBackendId?: string;    // backend id of parent work
+  workLocalId?: number;      // local id of parent work (fallback when offline)
+  name: string;
+  description?: string;
+  synced: boolean;
+  updatedAt: number;
+}
+
 class ProjectsDB extends Dexie {
   projects!: Dexie.Table<ProjectRecord, number>;
   works!: Dexie.Table<WorkRecord, number>;
+  subworks!: Dexie.Table<SubworkRecord, number>;
 
   constructor() {
     super("civigoProjectsDB");
-    this.version(2).stores({
-      projects: "++id, backendId, synced, updatedAt",
+    this.version(3).stores({
+      projects: "++id, backendId, synced, updatedAt, deleted",
       works: "++id, backendId, projectBackendId, projectLocalId, synced, updatedAt",
+      subworks: "++id, backendId, workBackendId, workLocalId, synced, updatedAt",
     });
   }
 }
