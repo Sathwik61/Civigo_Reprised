@@ -306,8 +306,9 @@ export default function SubworkDetails() {
                 Add row
               </Button>
             </div>
-            <table className="min-w-full text-left text-[11px]">
-              <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-full text-left text-[11px]">
+                <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
                 <tr>
                   <th className="px-4 py-2">S. No</th>
                   <th className="px-4 py-2">Name</th>
@@ -319,8 +320,8 @@ export default function SubworkDetails() {
                   <th className="px-4 py-2">Total (Rs)</th>
                   <th className="px-4 py-2"></th>
                 </tr>
-              </thead>
-              <tbody>
+                </thead>
+                <tbody>
                 {additions.map((row, index) => (
                   <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
                     <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
@@ -388,8 +389,9 @@ export default function SubworkDetails() {
                   <td className="px-4 py-2 text-right">{additionsTotal.toFixed(2)}</td>
                   <td></td>
                 </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
 
           <div className="overflow-hidden rounded-xl border border-slate-200/80 bg-white dark:border-white/10 dark:bg-slate-950/80">
@@ -399,8 +401,9 @@ export default function SubworkDetails() {
                 Add row
               </Button>
             </div>
-            <table className="min-w-full text-left text-[11px]">
-              <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
+            <div className="w-full overflow-x-auto">
+              <table className="min-w-full text-left text-[11px]">
+                <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
                 <tr>
                   <th className="px-4 py-2">S. No</th>
                   <th className="px-4 py-2">Name</th>
@@ -412,8 +415,8 @@ export default function SubworkDetails() {
                   <th className="px-4 py-2">Total (Rs)</th>
                   <th className="px-4 py-2"></th>
                 </tr>
-              </thead>
-              <tbody>
+                </thead>
+                <tbody>
                 {deductions.map((row, index) => (
                   <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
                     <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
@@ -481,8 +484,9 @@ export default function SubworkDetails() {
                   <td className="px-4 py-2 text-right">{deductionsTotal.toFixed(2)}</td>
                   <td></td>
                 </tr>
-              </tbody>
-            </table>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
         <div className="mt-6 flex justify-end">
