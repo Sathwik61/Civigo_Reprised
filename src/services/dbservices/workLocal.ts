@@ -1,5 +1,5 @@
 import { projectsDB, type WorkRecord } from "@/db/projectsDB";
-import { createWork, listWorks, type WorkPayload } from "@/services/api/work";
+import { createWork, listWorks, updateWork, deleteWork, type WorkPayload } from "@/services/api/work";
 
 export async function addLocalWork(
   work: Omit<WorkRecord, "id" | "synced" | "updatedAt" | "backendId">,
@@ -14,6 +14,7 @@ export async function getLocalWorksForProject(projectKey: { backendId?: string; 
     .equals(projectKey.backendId ?? "")
     .or("projectLocalId")
     .equals(projectKey.localId ?? -1)
+    .and((w) => !w.deleted)
     .toArray();
 }
 
@@ -30,6 +31,7 @@ export async function syncWorksFromServer() {
       description: w.description,
       synced: true,
       updatedAt: Date.now(),
+      deleted: false,
     })),
   );
 }
@@ -37,9 +39,12 @@ export async function syncWorksFromServer() {
 /** Push unsynced local works to server */
 export async function syncWorksToServer() {
   const all = await projectsDB.works.toArray();
-  const unsynced = all.filter((w) => w.synced === false);
+  const toCreate = all.filter((w) => !w.backendId && !w.deleted && w.synced === false);
+  const toUpdate = all.filter((w) => w.backendId && !w.deleted && w.synced === false);
+  const toDelete = all.filter((w) => w.backendId && w.deleted && w.synced === false);
 
-  for (const w of unsynced) {
+  // create new works on backend
+  for (const w of toCreate) {
     try {
       const payload: WorkPayload = {
         name: w.name,
@@ -53,7 +58,33 @@ export async function syncWorksToServer() {
         updatedAt: Date.now(),
       });
     } catch {
-      // keep as unsynced
+      // keep as unsynced; will retry later
+    }
+  }
+
+  // update existing works on backend
+  for (const w of toUpdate) {
+    try {
+      await updateWork(w.backendId!, {
+        name: w.name,
+        description: w.description,
+      });
+      await projectsDB.works.update(w.id!, {
+        synced: true,
+        updatedAt: Date.now(),
+      });
+    } catch {
+      // keep as unsynced; will retry later
+    }
+  }
+
+  // delete works on backend
+  for (const w of toDelete) {
+    try {
+      await deleteWork(w.backendId!);
+      await projectsDB.works.delete(w.id!);
+    } catch (err) {
+      console.error("Failed to delete work on backend:", w.backendId, err);
     }
   }
 }
@@ -73,5 +104,16 @@ export async function updateLocalWork(record: WorkRecord, updates: Partial<Pick<
 
 export async function deleteLocalWork(record: WorkRecord) {
   if (!record.id) return;
-  await projectsDB.works.delete(record.id);
+  // soft delete; actual deletion happens after successful server sync
+  await projectsDB.works.update(record.id, {
+    deleted: true,
+    synced: false,
+    updatedAt: Date.now(),
+  });
+}
+
+export async function fullWorksSync() {
+  if (!navigator.onLine) return;
+  await syncWorksToServer();
+  await syncWorksFromServer();
 }

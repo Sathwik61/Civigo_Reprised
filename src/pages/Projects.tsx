@@ -149,7 +149,10 @@ export default function Projects() {
                                 <button
                                     type="button"
                                     className="text-left w-full hover:text-primary"
-                                    onClick={() => navigate(`/projects/${project.id}/works`)}
+                                    onClick={() => {
+                                        if (!project.backendId) return;
+                                        navigate(`/projects/${project.backendId}/works`);
+                                    }}
                                 >
                                     <span>{project.name}</span>
                                 </button>

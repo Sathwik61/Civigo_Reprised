@@ -1,0 +1,171 @@
+import { projectsDB, type SubworkEntryRecord } from "@/db/projectsDB";
+import { addItems, deleteItem, listSubworks, updateItem, type ItemPayload } from "@/services/api/subwork";
+
+export async function getLocalEntriesForSubwork(
+  subworkKey: { backendId?: string; localId?: number },
+  kind: "details" | "deductions",
+): Promise<SubworkEntryRecord[]> {
+  return projectsDB.subworkEntries
+    .where("subworkBackendId")
+    .equals(subworkKey.backendId ?? "")
+    .or("subworkLocalId")
+    .equals(subworkKey.localId ?? -1)
+    .and((e) => e.kind === kind && !e.deleted)
+    .toArray();
+}
+
+export async function addLocalEntry(entry: Omit<SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId">) {
+  const now = Date.now();
+  await projectsDB.subworkEntries.add({ ...entry, synced: false, updatedAt: now });
+}
+
+export async function updateLocalEntry(record: SubworkEntryRecord, updates: Partial<SubworkEntryRecord>) {
+  if (!record.id) return;
+  const now = Date.now();
+  await projectsDB.subworkEntries.update(record.id, {
+    ...record,
+    ...updates,
+    synced: false,
+    updatedAt: now,
+  });
+}
+
+export async function markEntryDeletedLocal(record: SubworkEntryRecord) {
+  if (!record.id) return;
+  await projectsDB.subworkEntries.update(record.id, {
+    deleted: true,
+    synced: false,
+    updatedAt: Date.now(),
+  });
+}
+
+/** Pull all entries from backend subworks and overwrite local cache for those subworks */
+export async function syncSubworkEntriesFromServer() {
+  const remoteSubworks = await listSubworks();
+
+  // Build a map of existing local entries to keep relationship between backendId and local id
+  const allLocal = await projectsDB.subworkEntries.toArray();
+
+  await projectsDB.subworkEntries.clear();
+
+  const bulk: SubworkEntryRecord[] = [];
+
+  for (const s of remoteSubworks as any[]) {
+    const backendId = String(s.id);
+    const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
+    const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
+
+    const pushItems = (items: ItemPayload[], kind: "details" | "deductions") => {
+      for (const it of items) {
+        const itemId = (it as any).id ? String((it as any).id) : undefined;
+        const existing = itemId
+          ? allLocal.find((e) => e.backendId === itemId && e.subworkBackendId === backendId)
+          : undefined;
+
+        const base: SubworkEntryRecord = {
+          id: existing?.id,
+          backendId: itemId,
+          subworkBackendId: backendId,
+          subworkLocalId: undefined,
+          kind,
+          name: String((it as any).name ?? ""),
+          number: Number((it as any).number ?? 0),
+          length: Number((it as any).length ?? 0),
+          breadth: Number((it as any).breadth ?? 0),
+          depth: Number((it as any).depth ?? 0),
+          quantity: Number((it as any).quantity ?? 0),
+          rate: Number((it as any).rate ?? 0),
+          total: Number((it as any).total ?? 0),
+          synced: true,
+          updatedAt: Date.now(),
+          deleted: false,
+        };
+        bulk.push(base);
+      }
+    };
+
+    pushItems(details, "details");
+    pushItems(deductions, "deductions");
+  }
+
+  if (bulk.length) {
+    await projectsDB.subworkEntries.bulkPut(bulk);
+  }
+}
+
+/** Push local changes (create/update/delete) to backend for all subworks */
+export async function syncSubworkEntriesToServer() {
+  const all = await projectsDB.subworkEntries.toArray();
+
+  const toCreate = all.filter((e) => !e.backendId && !e.deleted && e.synced === false);
+  const toUpdate = all.filter((e) => e.backendId && !e.deleted && e.synced === false);
+  const toDelete = all.filter((e) => e.backendId && e.deleted && e.synced === false);
+
+  // create
+  for (const e of toCreate) {
+    if (!e.subworkBackendId) continue;
+    try {
+      const payload: ItemPayload = {
+        name: e.name,
+        length: e.length,
+        breadth: e.breadth,
+        depth: e.depth,
+        quantity: e.quantity,
+        number: e.number,
+        rate: e.rate,
+        total: e.total,
+      } as any;
+
+      const created = await addItems(e.subworkBackendId, e.kind, [payload]);
+      const createdItem = created.items[0] as any;
+      await projectsDB.subworkEntries.update(e.id!, {
+        backendId: createdItem.id ? String(createdItem.id) : undefined,
+        synced: true,
+        updatedAt: Date.now(),
+      });
+    } catch {
+      // keep unsynced
+    }
+  }
+
+  // update
+  for (const e of toUpdate) {
+    if (!e.subworkBackendId || !e.backendId) continue;
+    try {
+      const payload: ItemPayload = {
+        name: e.name,
+        length: e.length,
+        breadth: e.breadth,
+        depth: e.depth,
+        quantity: e.quantity,
+        number: e.number,
+        rate: e.rate,
+        total: e.total,
+      } as any;
+      await updateItem(e.subworkBackendId, e.backendId, e.kind, payload);
+      await projectsDB.subworkEntries.update(e.id!, {
+        synced: true,
+        updatedAt: Date.now(),
+      });
+    } catch {
+      // keep unsynced
+    }
+  }
+
+  // delete
+  for (const e of toDelete) {
+    if (!e.subworkBackendId || !e.backendId) continue;
+    try {
+      await deleteItem(e.subworkBackendId, e.backendId, e.kind);
+      await projectsDB.subworkEntries.delete(e.id!);
+    } catch (err) {
+      console.error("Failed to delete subwork entry on backend:", e.backendId, err);
+    }
+  }
+}
+
+export async function fullSubworkEntriesSync() {
+  if (!navigator.onLine) return;
+  await syncSubworkEntriesToServer();
+  await syncSubworkEntriesFromServer();
+}

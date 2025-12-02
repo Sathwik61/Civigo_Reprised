@@ -9,12 +9,11 @@ import {
   getLocalWorksForProject,
   updateLocalWork,
   deleteLocalWork,
-  syncWorksFromServer,
-  syncWorksToServer,
+  fullWorksSync,
 } from "@/services/dbservices/workLocal";
 
 export default function Works() {
-  const { projectId } = useParams(); // this is backend project id
+  const { projectId } = useParams(); // this is BACKEND project id
   const [works, setWorks] = useState<WorkRecord[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingWork, setEditingWork] = useState<WorkRecord | null>(null);
@@ -22,6 +21,8 @@ export default function Works() {
   const [workToDelete, setWorkToDelete] = useState<WorkRecord | null>(null);
 
   useEffect(() => {
+    console.log("Works page projectId param =", projectId);
+  
     let cancelled = false;
 
     async function init() {
@@ -31,8 +32,7 @@ export default function Works() {
       if (!cancelled) setWorks(local);
 
       if (navigator.onLine) {
-        await syncWorksToServer();
-        await syncWorksFromServer();
+        await fullWorksSync();
         const synced = await getLocalWorksForProject({ backendId: projectId });
         if (!cancelled) setWorks(synced);
       }
@@ -42,8 +42,7 @@ export default function Works() {
 
     const onOnline = async () => {
       if (!projectId) return;
-      await syncWorksToServer();
-      await syncWorksFromServer();
+      await fullWorksSync();
       const synced = await getLocalWorksForProject({ backendId: projectId });
       setWorks(synced);
     };
@@ -76,8 +75,7 @@ export default function Works() {
     setWorks(updated);
 
     if (navigator.onLine) {
-      await syncWorksToServer();
-      await syncWorksFromServer();
+      await fullWorksSync();
       const synced = await getLocalWorksForProject({ backendId: projectId });
       setWorks(synced);
     }
@@ -112,8 +110,9 @@ export default function Works() {
 
         <div className="space-y-2 text-sm">
           {works.map((work) => (
+            
             <div
-              key={work.id?work.id:work.backendId}
+              key={work.id}
               className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-xs dark:border-white/10 dark:bg-slate-900/70"
             >
               <div className="mx-3">
