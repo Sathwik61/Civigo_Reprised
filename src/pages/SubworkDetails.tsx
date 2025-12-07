@@ -413,6 +413,9 @@ export default function SubworkDetails() {
                       await updateLocalSubwork(localSubwork, { unit: next });
                     }
                   }
+                  // recalculate all rows and totals based on the new unit
+                  setAdditions((prev) => recalculateRows(prev, next, ratePerUnit, "additions"));
+                  setDeductions((prev) => recalculateRows(prev, next, ratePerUnit, "deductions"));
                 }}
               >
                 <option value="SFT">SFT</option>
@@ -429,6 +432,7 @@ export default function SubworkDetails() {
                   const n = parseFloat(e.target.value);
                   const next = Number.isNaN(n) ? 0 : n;
                   setRatePerUnit(next);
+                  // persist default rate for this subwork
                   if (subworkId) {
                     const localSubwork = await projectsDB.subworks
                       .where("backendId")
@@ -438,6 +442,9 @@ export default function SubworkDetails() {
                       await updateLocalSubwork(localSubwork, { defaultRate: next });
                     }
                   }
+                  // recalculate all rows and totals based on the new rate
+                  setAdditions((prev) => recalculateRows(prev, unit, next, "additions"));
+                  setDeductions((prev) => recalculateRows(prev, unit, next, "deductions"));
                 }}
               />
             </div>
