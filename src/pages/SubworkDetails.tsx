@@ -253,30 +253,27 @@ export default function SubworkDetails() {
     };
 
     const updater = (rows: Row[], kind: "additions" | "deductions"): Row[] => {
-      return recalculateRows(
-        rows.map((row) => {
-          if (row.id !== id) return row;
-          if (field === "name") {
-            return { ...row, name: value };
-          }
-          if (field === "number") {
-            return { ...row, number: parseNum(value) };
-          }
-          if (field === "length") {
-            return { ...row, length: parseNum(value) };
-          }
-          if (field === "breadth") {
-            return { ...row, breadth: parseNum(value) };
-          }
-          if (field === "depth") {
-            return { ...row, depth: parseNum(value) };
-          }
-          return row;
-        }),
-        unit,
-        ratePerUnit,
-        kind,
-      );
+      const updatedRows = rows.map((row) => {
+        if (row.id !== id) return row;
+        if (field === "name") {
+          return { ...row, name: value };
+        }
+        if (field === "number") {
+          return { ...row, number: parseNum(value) };
+        }
+        if (field === "length") {
+          return { ...row, length: parseNum(value) };
+        }
+        if (field === "breadth") {
+          return { ...row, breadth: parseNum(value) };
+        }
+        if (field === "depth") {
+          return { ...row, depth: parseNum(value) };
+        }
+        return row;
+      });
+      // use the latest unit and ratePerUnit when recalculating
+      return recalculateRows(updatedRows, unit, ratePerUnit, kind);
     };
 
     if (type === "details") {
