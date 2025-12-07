@@ -79,6 +79,8 @@ export async function syncSubworkEntriesFromServer() {
           quantity: Number((it as any).quantity ?? 0),
           rate: Number((it as any).rate ?? 0),
           total: Number((it as any).total ?? 0),
+          unit: (it as any).unit === "CFT" ? "CFT" : (it as any).unit === "SFT" ? "SFT" : undefined,
+          defaultRate: Number((it as any).defaultRate ?? 0),
           synced: true,
           updatedAt: Date.now(),
           deleted: false,

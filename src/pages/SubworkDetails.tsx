@@ -4,6 +4,8 @@ import { useParams } from "react-router-dom";
 import { Button } from "@/components/ui";
 import type { ItemPayload } from "@/services/api/subwork";
 import { listSubworks } from "@/services/api/subwork";
+import { projectsDB } from "@/db/projectsDB";
+import { updateLocalSubwork } from "@/services/dbservices/subworkLocal";
 import {
   getLocalEntriesForSubwork,
   fullSubworkEntriesSync,
@@ -38,13 +40,48 @@ export default function SubworkDetails() {
     let cancelled = false;
     async function init() {
       if (!subworkId) return;
-      // get subwork name from backend once
-      const all = await listSubworks();
-      const subwork = all.find((s) => s.id === subworkId);
-      if (!subwork || cancelled) return;
-      setSubworkName(subwork.name as string);
+      // try to get subwork name from backend once, but don't block local loading if it fails
+      try {
+        const all = await listSubworks();
+        const subwork = all.find((s) => s.id === subworkId);
+        if (subwork && !cancelled) {
+          setSubworkName(subwork.name as string);
+        }
+      } catch {
+        // ignore network / API errors here; we can still work with local data
+      }
 
-      // load entries from Dexie
+      // read subwork settings from Dexie subworks table (per-subwork settings)
+      if (!cancelled) {
+        let localSubwork = await projectsDB.subworks
+          .where("backendId")
+          .equals(subworkId)
+          .first();
+        if (!localSubwork) {
+          const id = await projectsDB.subworks.add({
+            backendId: subworkId,
+            workBackendId: undefined,
+            workLocalId: undefined,
+            name: subworkName || "",
+            description: undefined,
+            unit: undefined,
+            defaultRate: undefined,
+            synced: false,
+            updatedAt: Date.now(),
+            deleted: false,
+          });
+          localSubwork = await projectsDB.subworks.get(id!);
+        }
+
+        if (localSubwork?.unit === "SFT" || localSubwork?.unit === "CFT") {
+          setUnit(localSubwork.unit);
+        }
+        if (typeof localSubwork?.defaultRate === "number") {
+          setRatePerUnit(localSubwork.defaultRate);
+        }
+      }
+
+      // always load entries from Dexie so data is available offline
       const localAdd = await getLocalEntriesForSubwork({ backendId: subworkId }, "details");
       const localDed = await getLocalEntriesForSubwork({ backendId: subworkId }, "deductions");
 
@@ -150,7 +187,10 @@ export default function SubworkDetails() {
     const createLocal = async (tempId: string) => {
       if (!subworkId) return;
       const kindKey = type;
-      const base: Omit<import("@/db/projectsDB").SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId"> = {
+      const base: Omit<
+        import("@/db/projectsDB").SubworkEntryRecord,
+        "id" | "synced" | "updatedAt" | "backendId"
+      > = {
         subworkBackendId: subworkId,
         subworkLocalId: undefined,
         kind: kindKey,
@@ -162,9 +202,10 @@ export default function SubworkDetails() {
         quantity: 0,
         rate: ratePerUnit,
         total: 0,
+        unit,
         deleted: false,
       };
-      const nowId = await addLocalEntry(base as any);
+      const nowId = await addLocalEntry(base);
       // patch the just-created row with its Dexie id so future edits/deletes persist
       const updater = (rows: Row[]): Row[] =>
         rows.map((r) => (r.id === tempId ? { ...r, localId: nowId as number } : r));
@@ -245,7 +286,8 @@ export default function SubworkDetails() {
               depth: updated.depth,
               quantity: updated.quantity,
               total: updated.total,
-            },
+              rate: ratePerUnit,
+            } as any,
           );
         }
         return updatedRows;
@@ -265,7 +307,8 @@ export default function SubworkDetails() {
               depth: updated.depth,
               quantity: updated.quantity,
               total: updated.total,
-            },
+              rate: ratePerUnit,
+            } as any,
           );
         }
         return updatedRows;
@@ -350,7 +393,19 @@ export default function SubworkDetails() {
               <select
                 className="h-8 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900"
                 value={unit}
-                onChange={(e) => setUnit(e.target.value as "SFT" | "CFT")}
+                onChange={async (e) => {
+                  const next = e.target.value as "SFT" | "CFT";
+                  setUnit(next);
+                  if (subworkId) {
+                    const localSubwork = await projectsDB.subworks
+                      .where("backendId")
+                      .equals(subworkId)
+                      .first();
+                    if (localSubwork) {
+                      await updateLocalSubwork(localSubwork, { unit: next });
+                    }
+                  }
+                }}
               >
                 <option value="SFT">SFT</option>
                 <option value="CFT">CFT</option>
@@ -362,9 +417,19 @@ export default function SubworkDetails() {
                 className="h-8 w-24 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
                 placeholder="0"
                 value={ratePerUnit || ""}
-                onChange={(e: ChangeEvent<HTMLInputElement>) => {
+                onChange={async (e: ChangeEvent<HTMLInputElement>) => {
                   const n = parseFloat(e.target.value);
-                  setRatePerUnit(Number.isNaN(n) ? 0 : n);
+                  const next = Number.isNaN(n) ? 0 : n;
+                  setRatePerUnit(next);
+                  if (subworkId) {
+                    const localSubwork = await projectsDB.subworks
+                      .where("backendId")
+                      .equals(subworkId)
+                      .first();
+                    if (localSubwork) {
+                      await updateLocalSubwork(localSubwork, { defaultRate: next });
+                    }
+                  }
                 }}
               />
             </div>
@@ -384,86 +449,86 @@ export default function SubworkDetails() {
             <div className="w-full overflow-x-auto">
               <table className="min-w-full text-left text-[11px]">
                 <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-                <tr>
-                  <th className="px-4 py-2">S. No</th>
-                  <th className="px-4 py-2">Name</th>
-                  <th className="px-4 py-2">Number</th>
-                  <th className="px-4 py-2">Length</th>
-                  <th className="px-4 py-2">Breadth</th>
-                  <th className="px-4 py-2">Depth</th>
-                  <th className="px-4 py-2">Quantity</th>
-                  <th className="px-4 py-2">Total (Rs)</th>
-                  <th className="px-4 py-2"></th>
-                </tr>
+                  <tr>
+                    <th className="px-4 py-2">S. No</th>
+                    <th className="px-4 py-2">Name</th>
+                    <th className="px-4 py-2">Number</th>
+                    <th className="px-4 py-2">Length</th>
+                    <th className="px-4 py-2">Breadth</th>
+                    <th className="px-4 py-2">Depth</th>
+                    <th className="px-4 py-2">Quantity</th>
+                    <th className="px-4 py-2">Total (Rs)</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
                 </thead>
                 <tbody>
-                {additions.map((row, index) => (
-                  <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
-                    <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-full rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="Name (optional)"
-                        value={String(row.name ?? "")}
-                        onChange={(e) => handleRowChange("details", row.id, "name", e.target.value)}
-                      />
+                  {additions.map((row, index) => (
+                    <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
+                      <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-full rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="Name (optional)"
+                          value={String(row.name ?? "")}
+                          onChange={(e) => handleRowChange("details", row.id, "name", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-16 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.number != null ? String(row.number) : ""}
+                          onChange={(e) => handleRowChange("details", row.id, "number", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.length != null ? String(row.length) : ""}
+                          onChange={(e) => handleRowChange("details", row.id, "length", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.breadth != null ? String(row.breadth) : ""}
+                          onChange={(e) => handleRowChange("details", row.id, "breadth", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.depth != null ? String(row.depth) : ""}
+                          onChange={(e) => handleRowChange("details", row.id, "depth", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
+                        {row.quantity != null ? row.quantity.toFixed(2) : "0.00"}
+                      </td>
+                      <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
+                        {row.total != null ? row.total.toFixed(2) : "0.00"}
+                      </td>
+                      <td className="px-4 py-2 align-top text-right">
+                        <button
+                          type="button"
+                          className="text-[10px] text-red-500 hover:underline"
+                          onClick={() => handleRemoveRow("details", row.id)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-100 bg-slate-50 text-[11px] font-semibold dark:border-white/5 dark:bg-slate-900/60">
+                    <td className="px-4 py-2" colSpan={7}>
+                      Additions Total
                     </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-16 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.number != null ? String(row.number) : ""}
-                        onChange={(e) => handleRowChange("details", row.id, "number", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.length != null ? String(row.length) : ""}
-                        onChange={(e) => handleRowChange("details", row.id, "length", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.breadth != null ? String(row.breadth) : ""}
-                        onChange={(e) => handleRowChange("details", row.id, "breadth", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.depth != null ? String(row.depth) : ""}
-                        onChange={(e) => handleRowChange("details", row.id, "depth", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
-                      {row.quantity != null ? row.quantity.toFixed(2) : "0.00"}
-                    </td>
-                    <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
-                      {row.total != null ? row.total.toFixed(2) : "0.00"}
-                    </td>
-                    <td className="px-4 py-2 align-top text-right">
-                      <button
-                        type="button"
-                        className="text-[10px] text-red-500 hover:underline"
-                        onClick={() => handleRemoveRow("details", row.id)}
-                      >
-                        Remove
-                      </button>
-                    </td>
+                    <td className="px-4 py-2 text-right">{additionsTotal.toFixed(2)}</td>
+                    <td></td>
                   </tr>
-                ))}
-                <tr className="border-t border-slate-100 bg-slate-50 text-[11px] font-semibold dark:border-white/5 dark:bg-slate-900/60">
-                  <td className="px-4 py-2" colSpan={7}>
-                    Additions Total
-                  </td>
-                  <td className="px-4 py-2 text-right">{additionsTotal.toFixed(2)}</td>
-                  <td></td>
-                </tr>
                 </tbody>
               </table>
             </div>
@@ -479,86 +544,86 @@ export default function SubworkDetails() {
             <div className="w-full overflow-x-auto">
               <table className="min-w-full text-left text-[11px]">
                 <thead className="bg-slate-100 text-slate-700 dark:bg-slate-900/70 dark:text-slate-300">
-                <tr>
-                  <th className="px-4 py-2">S. No</th>
-                  <th className="px-4 py-2">Name</th>
-                  <th className="px-4 py-2">Number</th>
-                  <th className="px-4 py-2">Length</th>
-                  <th className="px-4 py-2">Breadth</th>
-                  <th className="px-4 py-2">Depth</th>
-                  <th className="px-4 py-2">Quantity</th>
-                  <th className="px-4 py-2">Total (Rs)</th>
-                  <th className="px-4 py-2"></th>
-                </tr>
+                  <tr>
+                    <th className="px-4 py-2">S. No</th>
+                    <th className="px-4 py-2">Name</th>
+                    <th className="px-4 py-2">Number</th>
+                    <th className="px-4 py-2">Length</th>
+                    <th className="px-4 py-2">Breadth</th>
+                    <th className="px-4 py-2">Depth</th>
+                    <th className="px-4 py-2">Quantity</th>
+                    <th className="px-4 py-2">Total (Rs)</th>
+                    <th className="px-4 py-2"></th>
+                  </tr>
                 </thead>
                 <tbody>
-                {deductions.map((row, index) => (
-                  <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
-                    <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-full rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="Name (optional)"
-                        value={String(row.name ?? "")}
-                        onChange={(e) => handleRowChange("deductions", row.id, "name", e.target.value)}
-                      />
+                  {deductions.map((row, index) => (
+                    <tr key={row.id} className="border-t border-slate-100 dark:border-white/5">
+                      <td className="px-4 py-2 align-top text-slate-700 dark:text-slate-300">{index + 1}</td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-full rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="Name (optional)"
+                          value={String(row.name ?? "")}
+                          onChange={(e) => handleRowChange("deductions", row.id, "name", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-16 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.number != null ? String(row.number) : ""}
+                          onChange={(e) => handleRowChange("deductions", row.id, "number", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.length != null ? String(row.length) : ""}
+                          onChange={(e) => handleRowChange("deductions", row.id, "length", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.breadth != null ? String(row.breadth) : ""}
+                          onChange={(e) => handleRowChange("deductions", row.id, "breadth", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top">
+                        <input
+                          className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
+                          placeholder="0"
+                          value={row.depth != null ? String(row.depth) : ""}
+                          onChange={(e) => handleRowChange("deductions", row.id, "depth", e.target.value)}
+                        />
+                      </td>
+                      <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
+                        {row.quantity != null ? row.quantity.toFixed(2) : "0.00"}
+                      </td>
+                      <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
+                        {row.total != null ? row.total.toFixed(2) : "0.00"}
+                      </td>
+                      <td className="px-4 py-2 align-top text-right">
+                        <button
+                          type="button"
+                          className="text-[10px] text-red-500 hover:underline"
+                          onClick={() => handleRemoveRow("deductions", row.id)}
+                        >
+                          Remove
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  <tr className="border-t border-slate-100 bg-slate-50 text-[11px] font-semibold dark:border-white/5 dark:bg-slate-900/60">
+                    <td className="px-4 py-2" colSpan={7}>
+                      Deductions Total
                     </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-16 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.number != null ? String(row.number) : ""}
-                        onChange={(e) => handleRowChange("deductions", row.id, "number", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.length != null ? String(row.length) : ""}
-                        onChange={(e) => handleRowChange("deductions", row.id, "length", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.breadth != null ? String(row.breadth) : ""}
-                        onChange={(e) => handleRowChange("deductions", row.id, "breadth", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top">
-                      <input
-                        className="h-8 w-20 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
-                        placeholder="0"
-                        value={row.depth != null ? String(row.depth) : ""}
-                        onChange={(e) => handleRowChange("deductions", row.id, "depth", e.target.value)}
-                      />
-                    </td>
-                    <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
-                      {row.quantity != null ? row.quantity.toFixed(2) : "0.00"}
-                    </td>
-                    <td className="px-4 py-2 align-top text-right text-slate-700 dark:text-slate-300">
-                      {row.total != null ? row.total.toFixed(2) : "0.00"}
-                    </td>
-                    <td className="px-4 py-2 align-top text-right">
-                      <button
-                        type="button"
-                        className="text-[10px] text-red-500 hover:underline"
-                        onClick={() => handleRemoveRow("deductions", row.id)}
-                      >
-                        Remove
-                      </button>
-                    </td>
+                    <td className="px-4 py-2 text-right">{deductionsTotal.toFixed(2)}</td>
+                    <td></td>
                   </tr>
-                ))}
-                <tr className="border-t border-slate-100 bg-slate-50 text-[11px] font-semibold dark:border-white/5 dark:bg-slate-900/60">
-                  <td className="px-4 py-2" colSpan={7}>
-                    Deductions Total
-                  </td>
-                  <td className="px-4 py-2 text-right">{deductionsTotal.toFixed(2)}</td>
-                  <td></td>
-                </tr>
                 </tbody>
               </table>
             </div>

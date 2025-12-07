@@ -29,6 +29,8 @@ export async function syncSubworksFromServer() {
       workLocalId: undefined,
       name: String(s.name ?? ""),
       description: typeof s.description === "string" ? s.description : undefined,
+      unit: (s as any).unit === "CFT" ? "CFT" : (s as any).unit === "SFT" ? "SFT" : undefined,
+      defaultRate: Number((s as any).defaultRate ?? 0),
       synced: true,
       updatedAt: Date.now(),
       deleted: false,
@@ -91,7 +93,7 @@ export async function syncSubworksToServer() {
 
 export async function updateLocalSubwork(
   record: SubworkRecord,
-  updates: Partial<Pick<SubworkRecord, "name" | "description">>,
+  updates: Partial<Pick<SubworkRecord, "name" | "description" | "unit" | "defaultRate">>,
 ) {
   if (!record.id) return;
   const now = Date.now();
