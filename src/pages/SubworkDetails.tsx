@@ -109,11 +109,21 @@ export default function SubworkDetails() {
         total: e.total,
       }));
 
-      const recalcedAdd = recalculateRows(mappedAdditions, unit, ratePerUnit, "additions");
-      const recalcedDed = recalculateRows(mappedDeductions, unit, ratePerUnit, "deductions");
+      // initialize rows and totals directly from stored Dexie values
       if (!cancelled) {
-        setAdditions(recalcedAdd);
-        setDeductions(recalcedDed);
+        setAdditions(mappedAdditions);
+        setDeductions(mappedDeductions);
+
+        const addTotal = mappedAdditions.reduce(
+          (sum, r) => sum + (r.total ?? 0),
+          0,
+        );
+        const dedTotal = mappedDeductions.reduce(
+          (sum, r) => sum + (r.total ?? 0),
+          0,
+        );
+        setAdditionsTotal(addTotal);
+        setDeductionsTotal(dedTotal);
       }
 
       // if online, sync entries then reload
@@ -122,42 +132,42 @@ export default function SubworkDetails() {
         const syncedAdd = await getLocalEntriesForSubwork({ backendId: subworkId }, "details");
         const syncedDed = await getLocalEntriesForSubwork({ backendId: subworkId }, "deductions");
         if (!cancelled) {
-          setAdditions(
-            recalculateRows(
-              syncedAdd.map((e) => ({
-                id: String(e.id ?? e.backendId ?? ""),
-                localId: e.id,
-                name: e.name,
-                number: e.number,
-                length: e.length,
-                breadth: e.breadth,
-                depth: e.depth,
-                quantity: e.quantity,
-                total: e.total,
-              })),
-              unit,
-              ratePerUnit,
-              "additions",
-            ),
+          const syncedAddRows: Row[] = syncedAdd.map((e) => ({
+            id: String(e.id ?? e.backendId ?? ""),
+            localId: e.id,
+            name: e.name,
+            number: e.number,
+            length: e.length,
+            breadth: e.breadth,
+            depth: e.depth,
+            quantity: e.quantity,
+            total: e.total,
+          }));
+          const syncedDedRows: Row[] = syncedDed.map((e) => ({
+            id: String(e.id ?? e.backendId ?? ""),
+            localId: e.id,
+            name: e.name,
+            number: e.number,
+            length: e.length,
+            breadth: e.breadth,
+            depth: e.depth,
+            quantity: e.quantity,
+            total: e.total,
+          }));
+
+          setAdditions(syncedAddRows);
+          setDeductions(syncedDedRows);
+
+          const addTotal = syncedAddRows.reduce(
+            (sum, r) => sum + (r.total ?? 0),
+            0,
           );
-          setDeductions(
-            recalculateRows(
-              syncedDed.map((e) => ({
-                id: String(e.id ?? e.backendId ?? ""),
-                localId: e.id,
-                name: e.name,
-                number: e.number,
-                length: e.length,
-                breadth: e.breadth,
-                depth: e.depth,
-                quantity: e.quantity,
-                total: e.total,
-              })),
-              unit,
-              ratePerUnit,
-              "deductions",
-            ),
+          const dedTotal = syncedDedRows.reduce(
+            (sum, r) => sum + (r.total ?? 0),
+            0,
           );
+          setAdditionsTotal(addTotal);
+          setDeductionsTotal(dedTotal);
         }
       }
     }
@@ -168,10 +178,8 @@ export default function SubworkDetails() {
     };
   }, [subworkId]);
 
-  useEffect(() => {
-    setAdditions((prev) => recalculateRows(prev, unit, ratePerUnit, "additions"));
-    setDeductions((prev) => recalculateRows(prev, unit, ratePerUnit, "deductions"));
-  }, [unit, ratePerUnit]);
+  // totals are initialized from Dexie and updated when rows change;
+  // we no longer recompute all rows on every unit/rate change
 
   const handleAddRow = (type: "details" | "deductions") => {
     const makeBaseRow = (id: string): Row => ({
