@@ -13,6 +13,7 @@ import {
   updateLocalEntry,
   markEntryDeletedLocal,
 } from "@/services/dbservices/subworkEntryLocal";
+import { useAuthStore } from "@/zustand/useAuthStore";
 
 interface Row extends ItemPayload {
   id: string;
@@ -35,6 +36,7 @@ export default function SubworkDetails() {
 
   const [additionsTotal, setAdditionsTotal] = useState<number>(0);
   const [deductionsTotal, setDeductionsTotal] = useState<number>(0);
+  const { token, role } = useAuthStore.getState();
 
   useEffect(() => {
     let cancelled = false;
@@ -42,7 +44,8 @@ export default function SubworkDetails() {
       if (!subworkId) return;
       // try to get subwork name from backend once, but don't block local loading if it fails
       try {
-        const all = await listSubworks();
+
+        const all = await listSubworks(token ? token : "", role ? role : "");
         const subwork = all.find((s) => s.id === subworkId);
         if (subwork && !cancelled) {
           setSubworkName(subwork.name as string);
@@ -422,12 +425,15 @@ export default function SubworkDetails() {
             <div className="flex items-center gap-2 text-[11px]">
               <span>Rate / {unit}</span>
               <input
+                type="number"
+                step="any"
                 className="h-8 w-24 rounded-md border border-slate-200/80 bg-white px-2 text-[11px] outline-none ring-0 placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/30 dark:border-white/10 dark:bg-slate-900 dark:placeholder:text-slate-500"
                 placeholder="0"
                 value={ratePerUnit || ""}
                 onChange={async (e: ChangeEvent<HTMLInputElement>) => {
+                  // Accept and store float values for Rate/unit
                   const n = parseFloat(e.target.value);
-                  const next = Number.isNaN(n) ? 0 : n;
+                  const next = Number.isNaN(n) ? 0 : n; // next can be a float
                   setRatePerUnit(next);
                   // persist default rate for this subwork
                   if (subworkId) {

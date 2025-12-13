@@ -1,5 +1,6 @@
 import { projectsDB, type SubworkRecord } from "@/db/projectsDB";
 import { createSubwork, listSubworks, updateSubwork, deleteSubwork, type SubworkPayload } from "@/services/api/subwork";
+import { useAuthStore } from "@/zustand/useAuthStore";
 
 export async function addLocalSubwork(
   subwork: Omit<SubworkRecord, "id" | "synced" | "updatedAt" | "backendId">,
@@ -7,7 +8,14 @@ export async function addLocalSubwork(
   const now = Date.now();
   await projectsDB.subworks.add({ ...subwork, synced: false, updatedAt: now });
 }
-
+/**
+ * Given a workLocalId (Dexie id), returns the backendId (MongoDB id) of the work, or undefined if not found.
+ */
+export async function getWorkBackendIdFromLocalId(workLocalId: number | undefined): Promise<string | undefined> {
+  if (!workLocalId) return undefined;
+  const work = await projectsDB.works.get(workLocalId);
+  return work?.backendId;
+}
 export async function getLocalSubworksForWork(workKey: { backendId?: string; localId?: number }): Promise<SubworkRecord[]> {
   return projectsDB.subworks
     .where("workBackendId")
@@ -20,7 +28,10 @@ export async function getLocalSubworksForWork(workKey: { backendId?: string; loc
 
 /** Pull all subworks from backend and overwrite local cache */
 export async function syncSubworksFromServer() {
-  const remote = await listSubworks();
+  const { token, role } = useAuthStore.getState();
+  if (!token || !role) return;
+
+  const remote = await listSubworks(token, role);
   await projectsDB.subworks.clear();
   await projectsDB.subworks.bulkAdd(
     remote.map((s) => ({
@@ -40,20 +51,23 @@ export async function syncSubworksFromServer() {
 
 /** Push unsynced local subworks to server */
 export async function syncSubworksToServer() {
+  const { token, role } = useAuthStore.getState();
+  if (!token || !role) return;
+
   const all = await projectsDB.subworks.toArray();
   const toCreate = all.filter((s) => !s.backendId && !s.deleted && s.synced === false);
   const toUpdate = all.filter((s) => s.backendId && !s.deleted && s.synced === false);
   const toDelete = all.filter((s) => s.backendId && s.deleted && s.synced === false);
 
-  // create new subworks on backend
   for (const s of toCreate) {
     if (!s.workBackendId) continue;
     try {
+      const Wid:string |undefined = await getWorkBackendIdFromLocalId(Number(s.workBackendId));
       const payload: SubworkPayload = {
         name: s.name,
-        workId: s.workBackendId,
+        wid: Wid || "",
       };
-      const created = await createSubwork(payload);
+      const created = await createSubwork(payload, token, role);
       await projectsDB.subworks.update(s.id!, {
         backendId: created.id,
         synced: true,
@@ -70,7 +84,7 @@ export async function syncSubworksToServer() {
       await updateSubwork(s.backendId!, {
         name: s.name,
         description: s.description,
-      });
+      }, token, role);
       await projectsDB.subworks.update(s.id!, {
         synced: true,
         updatedAt: Date.now(),
@@ -83,7 +97,7 @@ export async function syncSubworksToServer() {
   // delete subworks on backend
   for (const s of toDelete) {
     try {
-      await deleteSubwork(s.backendId!);
+      await deleteSubwork(s.backendId!, token, role);
       await projectsDB.subworks.delete(s.id!);
     } catch (err) {
       console.error("Failed to delete subwork on backend:", s.backendId, err);
