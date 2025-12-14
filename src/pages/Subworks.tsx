@@ -25,12 +25,12 @@ export default function Subworks() {
     let cancelled = false;
 
     async function init() {
-      const local = await getLocalSubworksForWork({ backendId: workId });
+      const local = await getLocalSubworksForWork({ localId: Number(workId) });
       if (!cancelled) setSubworks(local);
 
       if (navigator.onLine) {
         await fullSubworksSync();
-        const synced = await getLocalSubworksForWork({ backendId: workId });
+        const synced = await getLocalSubworksForWork({ localId: Number(workId) });
         if (!cancelled) setSubworks(synced);
       }
     }
@@ -39,7 +39,7 @@ export default function Subworks() {
 
     const onOnline = async () => {
       await fullSubworksSync();
-      const data = await getLocalSubworksForWork({ backendId: workId });
+      const data = await getLocalSubworksForWork({ localId: Number(workId) });
       if (!cancelled) setSubworks(data);
     };
 
@@ -60,21 +60,22 @@ export default function Subworks() {
         description: values.description,
       });
     } else {
+      console.log("Adding local subwork for work local ID:", Number(workId));
       await addLocalSubwork({
         workBackendId: workId,
-        workLocalId: undefined,
+        workLocalId: Number(workId),
         name: values.name,
         description: values.description,
       });
     }
 
-    const updated = await getLocalSubworksForWork({ backendId: workId });
-    setSubworks(updated);
+    const updated = await getLocalSubworksForWork({ localId: Number(workId) });
+    setSubworks(updated ?? []);
 
     if (navigator.onLine) {
       await fullSubworksSync();
-      const synced = await getLocalSubworksForWork({ backendId: workId });
-      setSubworks(synced);
+      const synced = await getLocalSubworksForWork({ localId: Number(workId) });
+      setSubworks(synced ?? []);
     }
 
     setEditingSubwork(null);
@@ -88,7 +89,7 @@ export default function Subworks() {
   const handleConfirmDelete = async () => {
     if (!subworkToDelete || !subworkToDelete.id || !workId) return;
     await deleteLocalSubwork(subworkToDelete);
-    const updated = await getLocalSubworksForWork({ backendId: workId });
+    const updated = await getLocalSubworksForWork({ localId: Number(workId) });
     setSubworks(updated);
     setSubworkToDelete(null);
   };
