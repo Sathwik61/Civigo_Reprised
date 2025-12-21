@@ -1,6 +1,7 @@
 import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { ItemPayload } from "@/services/api/subwork";
 import { listSubworks } from "@/services/api/subwork";
@@ -130,7 +131,7 @@ export default function SubworkDetails() {
       }
 
       // if online, sync entries then reload
-      if (navigator.onLine) {
+      /*if (navigator.onLine) {
         await fullSubworkEntriesSync();
         const syncedAdd = await getLocalEntriesForSubwork({ backendId: subworkId }, "details");
         const syncedDed = await getLocalEntriesForSubwork({ backendId: subworkId }, "deductions");
@@ -172,7 +173,7 @@ export default function SubworkDetails() {
           setAdditionsTotal(addTotal);
           setDeductionsTotal(dedTotal);
         }
-      }
+      }*/
     }
 
     init();
@@ -390,12 +391,12 @@ export default function SubworkDetails() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-50">
       <div className="container mx-auto px-6 py-10">
-        <div className="mb-6 flex items-center justify-between">
+        <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-lg font-semibold tracking-tight">Subwork details {subworkName ? `- ${subworkName}` : ""}</h1>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">Track additions and deductions for this subwork.</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <div className="flex items-center gap-2 text-[11px]">
               <span>Unit</span>
               <select
@@ -451,8 +452,11 @@ export default function SubworkDetails() {
                 }}
               />
             </div>
-            <Button className="h-8 px-3 text-xs" onClick={() => handleAddRow("details")}>
+            {/* <Button className="h-8 px-3 text-xs" onClick={() => handleAddRow("details")}>
               Add addition
+            </Button> */}
+            <Button className="h-8 px-3 text-xs" onClick={() => fullSubworkEntriesSync()}>
+              <RefreshCw className="w-4 h-4 mr-1" /> Sync
             </Button>
           </div>
         </div>
@@ -647,8 +651,8 @@ export default function SubworkDetails() {
             </div>
           </div>
         </div>
-        <div className="mt-6 flex justify-end">
-          <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-[11px] dark:border-white/10 dark:bg-slate-900/70">
+        <div className="mt-6 flex justify-center md:justify-end">
+          <div className="w-full max-w-sm rounded-lg border border-slate-200/80 bg-white px-4 py-3 text-[11px] dark:border-white/10 dark:bg-slate-900/70">
             <div className="flex justify-between gap-8">
               <span className="text-slate-600 dark:text-slate-300">Additions Total:</span>
               <span className="font-semibold">{additionsTotal.toFixed(2)}</span>
