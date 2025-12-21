@@ -1,16 +1,13 @@
 import { projectsDB, type SubworkEntryRecord } from "@/db/projectsDB";
 import { addItems, deleteItem, listSubworks, updateItem, type ItemPayload } from "@/services/api/subwork";
+import { useAuthStore } from "@/zustand/useAuthStore";
 
 export async function getLocalEntriesForSubwork(
   subworkKey: { backendId?: string; localId?: number },
   kind: "details" | "deductions",
 ): Promise<SubworkEntryRecord[]> {
   return projectsDB.subworkEntries
-    .where("subworkBackendId")
-    .equals(subworkKey.backendId ?? "")
-    .or("subworkLocalId")
-    .equals(subworkKey.localId ?? -1)
-    .and((e) => e.kind === kind && !e.deleted)
+    .filter((e) => (e.subworkBackendId === subworkKey.backendId || e.subworkLocalId === subworkKey.localId) && e.kind === kind && !e.deleted)
     .toArray();
 }
 
@@ -42,14 +39,28 @@ export async function markEntryDeletedLocal(record: SubworkEntryRecord) {
   });
 }
 
-/** Pull all entries from backend subworks and overwrite local cache for those subworks */
+/** Pull all entries from backend subworks and sync local cache */
 export async function syncSubworkEntriesFromServer() {
-  const remoteSubworks = await listSubworks();
+  const { token, role } = useAuthStore.getState();
+  const authToken = token ?? "";
+  const authRole = role ?? "";
+  const remoteSubworks = await listSubworks(authToken, authRole);
 
   // Build a map of existing local entries to keep relationship between backendId and local id
   const allLocal = await projectsDB.subworkEntries.toArray();
 
-  await projectsDB.subworkEntries.clear();
+  // Collect all remote item backendIds
+  const remoteItemIds = new Set<string>();
+  for (const s of remoteSubworks as any[]) {
+    const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
+    const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
+    for (const it of [...details, ...deductions]) {
+      const itemId = (it as any).id ? String((it as any).id) : undefined;
+      if (itemId) {
+        remoteItemIds.add(itemId);
+      }
+    }
+  }
 
   const bulk: SubworkEntryRecord[] = [];
 
@@ -96,10 +107,20 @@ export async function syncSubworkEntriesFromServer() {
   if (bulk.length) {
     await projectsDB.subworkEntries.bulkPut(bulk);
   }
+
+  // Delete local synced entries not present on server
+  for (const local of allLocal) {
+    if (local.synced && local.backendId && !remoteItemIds.has(local.backendId)) {
+      await projectsDB.subworkEntries.delete(local.id!);
+    }
+  }
 }
 
 /** Push local changes (create/update/delete) to backend for all subworks */
 export async function syncSubworkEntriesToServer() {
+  const { token, role } = useAuthStore.getState();
+  const authToken = token ?? "";
+  const authRole = role ?? "";
   const all = await projectsDB.subworkEntries.toArray();
 
   const toCreate = all.filter((e) => !e.backendId && !e.deleted && e.synced === false);
@@ -121,7 +142,7 @@ export async function syncSubworkEntriesToServer() {
         total: e.total,
       } as any;
 
-      const created = await addItems(e.subworkBackendId, e.kind, [payload]);
+      const created = await addItems(e.subworkBackendId, e.kind, [payload], authToken, authRole);
       const createdItem = created.items[0] as any;
       await projectsDB.subworkEntries.update(e.id!, {
         backendId: createdItem.id ? String(createdItem.id) : undefined,
@@ -147,7 +168,7 @@ export async function syncSubworkEntriesToServer() {
         rate: e.rate,
         total: e.total,
       } as any;
-      await updateItem(e.subworkBackendId, e.backendId, e.kind, payload);
+      await updateItem(e.subworkBackendId, e.backendId, e.kind, payload, authToken, authRole);
       await projectsDB.subworkEntries.update(e.id!, {
         synced: true,
         updatedAt: Date.now(),
@@ -161,7 +182,7 @@ export async function syncSubworkEntriesToServer() {
   for (const e of toDelete) {
     if (!e.subworkBackendId || !e.backendId) continue;
     try {
-      await deleteItem(e.subworkBackendId, e.backendId, e.kind);
+      await deleteItem(e.subworkBackendId, e.backendId, e.kind, authToken, authRole);
       await projectsDB.subworkEntries.delete(e.id!);
     } catch (err) {
       console.error("Failed to delete subwork entry on backend:", e.backendId, err);

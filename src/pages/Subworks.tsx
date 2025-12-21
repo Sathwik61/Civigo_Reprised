@@ -124,7 +124,7 @@ export default function Subworks() {
                 </span>
               </div>
               <Link
-                to={`/subworks/${subwork.backendId ?? subwork.id}/details`}
+                to={`/subworks/${/*subwork.backendId ??*/ subwork.id}/details`}
                 className="flex-1 text-left hover:text-primary"
               >
                 <span>{subwork.name}</span>
