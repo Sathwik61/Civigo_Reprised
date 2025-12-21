@@ -1,7 +1,7 @@
 import type { ChangeEvent } from "react";
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Loader2, CheckCircle } from "lucide-react";
 import { Button } from "@/components/ui";
 import type { ItemPayload } from "@/services/api/subwork";
 import { listSubworks } from "@/services/api/subwork";
@@ -37,6 +37,7 @@ export default function SubworkDetails() {
 
   const [additionsTotal, setAdditionsTotal] = useState<number>(0);
   const [deductionsTotal, setDeductionsTotal] = useState<number>(0);
+  const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "synced">("idle");
   const { token, role } = useAuthStore.getState();
 
   useEffect(() => {
@@ -455,8 +456,28 @@ export default function SubworkDetails() {
             {/* <Button className="h-8 px-3 text-xs" onClick={() => handleAddRow("details")}>
               Add addition
             </Button> */}
-            <Button className="h-8 px-3 text-xs" onClick={() => fullSubworkEntriesSync()}>
-              <RefreshCw className="w-4 h-4 mr-1" /> Sync
+            <Button
+              className="h-8 px-3 text-xs"
+              onClick={async () => {
+                setSyncStatus("syncing");
+                try {
+                  await fullSubworkEntriesSync();
+                  setSyncStatus("synced");
+                  setTimeout(() => setSyncStatus("idle"), 3000);
+                } catch {
+                  setSyncStatus("idle");
+                }
+              }}
+              disabled={syncStatus === "syncing" || syncStatus === "synced"}
+            >
+              {syncStatus === "syncing" ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : syncStatus === "synced" ? (
+                <CheckCircle className="w-4 h-4 mr-1" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-1" />
+              )}
+              {syncStatus === "syncing" ? "Syncing..." : syncStatus === "synced" ? "Synced" : "Sync"}
             </Button>
           </div>
         </div>
