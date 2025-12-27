@@ -61,6 +61,8 @@ export interface SubworkEntryRecord {
   synced: boolean;
   updatedAt: number;
   deleted?: boolean;
+  operation?: "create" | "update" | "delete"; 
+  createSynced?: boolean;   // whether creation has been synced to backend
 }
 
 class ProjectsDB extends Dexie {
@@ -75,7 +77,7 @@ class ProjectsDB extends Dexie {
       projects: "++id, backendId, synced, updatedAt, deleted",
       works: "++id, backendId, projectBackendId, projectLocalId, synced, updatedAt, deleted",
       subworks: "++id, backendId, workBackendId, workLocalId, synced, updatedAt,unit,defaultRate, deleted",
-      subworkEntries: "++id, backendId, subworkBackendId, subworkLocalId, kind, synced, updatedAt, deleted",
+      subworkEntries: "++id, backendId, subworkBackendId, subworkLocalId, kind, synced, updatedAt, deleted, operation, createSynced",
     });
   }
 }

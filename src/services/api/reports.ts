@@ -1,5 +1,3 @@
-import { apiFetch } from "./client";
-
 export interface ReportWorkSelection {
   id: string; // work ID
   subworks: string[]; // subwork IDs

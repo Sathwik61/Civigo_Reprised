@@ -7,7 +7,7 @@ export async function addLocalSubwork(
   subwork: Omit<SubworkRecord, "id" | "synced" | "updatedAt" | "backendId">,
 ) {
   const now = Date.now();
-  const id = await projectsDB.subworks.add({ ...subwork, synced: false, updatedAt: now });
+  await projectsDB.subworks.add({ ...subwork, synced: false, updatedAt: now });
 }
 /**
  * Given a workLocalId (Dexie id), returns the backendId (MongoDB id) of the work, or undefined if not found.
@@ -154,6 +154,24 @@ export async function deleteLocalSubwork(record: SubworkRecord) {
     synced: false,
     updatedAt: Date.now(),
   });
+}
+
+/**
+ * Given a subworkLocalId (Dexie id), returns the backendId (MongoDB id) of the subwork, or undefined if not found.
+ */
+export async function getSubworkBackendIdFromLocalId(subworkLocalId: number | undefined): Promise<string | undefined> {
+  if (!subworkLocalId) return undefined;
+  const subwork = await projectsDB.subworks.get(subworkLocalId);
+  return subwork?.backendId;
+}
+
+/**
+ * Given a subworkBackendId (MongoDB id), returns the localId (Dexie id) of the subwork, or undefined if not found.
+ */
+export async function getSubworkLocalIdFromBackendId(subworkBackendId: string | undefined): Promise<number | undefined> {
+  if (!subworkBackendId) return undefined;
+  const subwork = await projectsDB.subworks.where("backendId").equals(subworkBackendId).first();
+  return subwork?.id;
 }
 
 export async function fullSubworksSync() {

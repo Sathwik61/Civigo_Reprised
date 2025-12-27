@@ -12,6 +12,8 @@ export interface Subwork extends SubworkPayload {
 }
 
 export interface ItemPayload {
+  id: string;
+  number: number;
   name: string;
   length?: number;
   breadth?: number;

@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui"
 import { useEffect, useState } from "react";
 import { getStoredToken, loginApi } from "@/services/api/login";
-import { decodeJwt, getRoleFromJwt, isJwtExpired } from "@/utils/decodeJwt";
+import { getRoleFromJwt, isJwtExpired } from "@/utils/decodeJwt";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/zustand/useAuthStore";
 

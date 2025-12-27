@@ -1,6 +1,4 @@
-import React from "react"
 import { Button } from "@/components/ui"
-import { useTheme } from "@/theme"
 import Card, {
   CardHeader,
   CardTitle,

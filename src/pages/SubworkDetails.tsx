@@ -19,7 +19,7 @@ import { useAuthStore } from "@/zustand/useAuthStore";
 interface Row extends ItemPayload {
   id: string;
   localId?: number; // Dexie id for offline persistence
-  number?: number;
+  number: number;
   length?: number;
   breadth?: number;
   depth?: number;
@@ -202,10 +202,11 @@ export default function SubworkDetails() {
       const kindKey = type;
       const base: Omit<
         import("@/db/projectsDB").SubworkEntryRecord,
-        "id" | "synced" | "updatedAt" | "backendId"
+        "id" | "synced" | "updatedAt"
       > = {
         subworkBackendId: subworkId,
         subworkLocalId: undefined,
+        backendId: undefined,
         kind: kindKey,
         name: "",
         number: 1,
@@ -217,6 +218,8 @@ export default function SubworkDetails() {
         total: 0,
         unit,
         deleted: false,
+        operation: "create",
+        createSynced: false,
       };
       const nowId = await addLocalEntry(base);
       // patch the just-created row with its Dexie id so future edits/deletes persist
@@ -285,6 +288,7 @@ export default function SubworkDetails() {
       setAdditions((prev) => {
         const updatedRows = updater(prev, "additions");
         const updated = updatedRows.find((r) => r.id === id);
+        // console.log("Updated row after change:", updated, updated?.synced);
         if (updated && updated.localId != null) {
           void updateLocalEntry(
             { id: updated.localId } as any,
@@ -297,6 +301,7 @@ export default function SubworkDetails() {
               quantity: updated.quantity,
               total: updated.total,
               rate: ratePerUnit,
+              // operation: "update",
             } as any,
           );
         }
@@ -461,8 +466,8 @@ export default function SubworkDetails() {
               onClick={async () => {
                 setSyncStatus("syncing");
                 try {
-                  await fullSubworkEntriesSync();
-                  setSyncStatus("synced");
+                  await fullSubworkEntriesSync(subworkId ?? "");
+                  setSyncStatus("synced");  
                   setTimeout(() => setSyncStatus("idle"), 3000);
                 } catch {
                   setSyncStatus("idle");
