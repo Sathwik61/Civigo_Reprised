@@ -197,3 +197,20 @@ export async function deleteItem(
     },
   });
 }
+
+export async function getSubworkDefaults(
+  id: string,
+  token: string,
+  role: string,
+): Promise<{ CFT?: number; SFT?: number }>
+{
+  const createdBy = getIdFromJwt(token || "") || "unknown";
+  return apiFetch<{ CFT?: number; SFT?: number }>(`/subwork/defaults/${id}`, {
+    method: "GET",
+    auth: true,
+    headers: {
+      createdBy,
+      role,
+    },
+  });
+}

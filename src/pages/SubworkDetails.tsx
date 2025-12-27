@@ -57,19 +57,20 @@ export default function SubworkDetails() {
       }
 
       // read subwork settings from Dexie subworks table (per-subwork settings)
-      if (!cancelled) {
+     /* if (!cancelled) {
         let localSubwork = await projectsDB.subworks
-          .where("backendId")
+          .where("id")
           .equals(subworkId)
           .first();
         if (!localSubwork) {
           const id = await projectsDB.subworks.add({
-            backendId: subworkId,
+            backendId: undefined,
             workBackendId: undefined,
             workLocalId: undefined,
             name: subworkName || "",
             description: undefined,
             unit: undefined,
+            // id: subworkId,
             defaultRate: undefined,
             synced: false,
             updatedAt: Date.now(),
@@ -85,7 +86,7 @@ export default function SubworkDetails() {
           setRatePerUnit(localSubwork.defaultRate);
         }
       }
-
+      */
       // always load entries from Dexie so data is available offline
       const localAdd = await getLocalEntriesForSubwork({ backendId: subworkId }, "details");
       const localDed = await getLocalEntriesForSubwork({ backendId: subworkId }, "deductions");
