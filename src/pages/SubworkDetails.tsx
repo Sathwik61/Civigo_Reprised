@@ -15,10 +15,11 @@ import {
   markEntryDeletedLocal,
 } from "@/services/dbservices/subworkEntryLocal";
 import { useAuthStore } from "@/zustand/useAuthStore";
+import { numericId } from "@/utils/randomId";
 
 interface Row extends ItemPayload {
   id: string;
-  localId?: number; // Dexie id for offline persistence
+  localId?: string; // Dexie id for offline persistence
   number: number;
   length?: number;
   breadth?: number;
@@ -203,8 +204,9 @@ export default function SubworkDetails() {
       const kindKey = type;
       const base: Omit<
         import("@/db/projectsDB").SubworkEntryRecord,
-        "id" | "synced" | "updatedAt"
+         "synced" | "updatedAt"
       > = {
+        id:numericId(),
         subworkBackendId: subworkId,
         subworkLocalId: undefined,
         backendId: undefined,
@@ -289,7 +291,7 @@ export default function SubworkDetails() {
       setAdditions((prev) => {
         const updatedRows = updater(prev, "additions");
         const updated = updatedRows.find((r) => r.id === id);
-        // console.log("Updated row after change:", updated, updated?.synced);
+        console.log("Updated row after change:", updated, updated?.synced);
         if (updated && updated.localId != null) {
           void updateLocalEntry(
             { id: updated.localId } as any,
@@ -302,7 +304,6 @@ export default function SubworkDetails() {
               quantity: updated.quantity,
               total: updated.total,
               rate: ratePerUnit,
-              // operation: "update",
             } as any,
           );
         }

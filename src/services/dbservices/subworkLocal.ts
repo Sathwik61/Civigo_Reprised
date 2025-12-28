@@ -221,8 +221,7 @@ export async function getSubworkLocalIdFromBackendId(subworkBackendId: string | 
   return subwork?.id;
 }
 export async function getSubworkValue(id: string, variableName: string): Promise<any> {
-  const entry = await projectsDB.subworkEntries.get(id);
-
+  const entry = await projectsDB.subworks.get(id);
   if (!entry) return undefined;
   return (entry as any)[variableName];
 }

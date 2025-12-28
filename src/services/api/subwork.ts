@@ -163,10 +163,11 @@ export async function updateItem(
   item: ItemPayload,
   token: string,
   role: string,
-): Promise<{ message: string; item: ItemPayload }>
+): Promise<{ message: string; item: ItemPayload[] }>
 {
   const createdBy = getIdFromJwt(token || "") || "unknown";
-  return apiFetch<{ message: string; item: ItemPayload }>(`/subwork/items/${id}/${itemId}`, {
+  // console.log("itemsss$$$",item, typeof(item),"\n\n",[item]);
+  return apiFetch<{ message: string; item: ItemPayload[] }>(`/subwork/items/${id}/${itemId}`, {
     method: "PUT",
     auth: true,
     headers: {
@@ -174,7 +175,7 @@ export async function updateItem(
       role,
       "X-Item-Type": type,
     },
-    body: JSON.stringify(item),
+    body: JSON.stringify([item]),
   });
 }
 

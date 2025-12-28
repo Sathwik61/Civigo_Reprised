@@ -20,7 +20,7 @@ export async function getLocalEntriesForSubwork(
 }
 
 export async function addLocalEntry(
-  entry: Omit<SubworkEntryRecord, "id" | "synced" | "updatedAt" | "backendId">,
+  entry: Omit<SubworkEntryRecord, "synced" | "updatedAt" | "backendId">,
 ) {
   const now = Date.now();
   // Dexie add() returns the generated primary key (id)
@@ -31,13 +31,12 @@ export async function updateLocalEntry(record: SubworkEntryRecord, updates: Part
   if (!record.id) return;
   const now = Date.now();
   // console.log("Updating local subwork entry ID", record.id, "with updates:", record.synced);
-  const syn = await getSubworkEntryValue(record.id,"synced")
-  // console.log("Synced value is:", syn);
+  const syn = await getSubworkEntryValue(record.id, "createSynced")
   await projectsDB.subworkEntries.update(record.id, {
     ...record,
     ...updates,
-    synced: false,
-    operation: syn?"update":"create",
+    synced: false ,
+    operation: syn ? "update" : "create",
     updatedAt: now,
   });
 }
@@ -54,40 +53,37 @@ export async function markEntryDeletedLocal(record: SubworkEntryRecord) {
 
 /** Pull all entries from backend subworks and sync local cache */
 export async function syncSubworkEntriesFromServer(wid: string) {
-  // console.log("Starting sync of subwork entries from server...");
-  // if(!navigator.onLine) return;
+  console.log("Starting sync of subwork entries from server...");
   wid = wid ?? "";
-  // console.log("Syncing subwork entries for subwork backend ID:", wid);
   const { token, role } = useAuthStore.getState();
   const authToken = token ?? "";
   const authRole = role ?? "";
   const remoteSubworks = await listSubworks(authToken, authRole);
-  // Build a map of existing local entries to keep relationship between backendId and local id
+  
+  console.log("thstsbsdy \n\n", remoteSubworks);
   const allLocal = await projectsDB.subworkEntries.toArray();
-  // console.log("Fetched subworks from Server:", JSON.parse(remoteSubworks.toString())[0]);
-  // console.log("Fetched subworks from Local:", allLocal);
-  
-  
-  // Collect all remote item backendIds
 
-    const remoteItemIds = new Set<string>();
-    const jsonRemoteData = JSON.parse(remoteSubworks.toString());
-    for (const s of jsonRemoteData as any[]) {
-      const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
-      const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
-      for (const it of [...details, ...deductions]) {
-        const itemId = (it as any).id ? String((it as any).id) : undefined;
-        if (itemId) {
-          remoteItemIds.add(itemId);
-        }
+  // Collect all remote item backendIds
+// $$$
+  const remoteSIds = remoteSubworks.map(r=>r.id);
+  const existing = await projectsDB.subworks.where("backendId").anyOf(remoteSIds).toArray();
+// $$$
+  const remoteItemIds = new Set<string>();
+  const jsonRemoteData = JSON.parse(remoteSubworks.toString());
+  for (const s of jsonRemoteData as any[]) {
+    const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
+    const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
+    for (const it of [...details, ...deductions]) {
+      const itemId = (it as any).id ? String((it as any).id) : undefined;
+      if (itemId) {
+        remoteItemIds.add(itemId);
       }
     }
-    // console.log("Remote item backend IDs from server:", remoteItemIds);
-  
+  }
+  // console.log("@#Entered", remoteItemIds);
+
 
   const bulk: SubworkEntryRecord[] = [];
-// console.log("Remote subworks fetched from server:", remoteSubworks);
-// console.log("Remote subworks fetched from server:", remoteSubworks);
   for (const s of jsonRemoteData as any[]) {
     const backendId = String(s.id);
     const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
@@ -105,16 +101,16 @@ export async function syncSubworkEntriesFromServer(wid: string) {
         const existing = itemId
           ? allLocal.find((e) => Number(e.backendId) === Number(itemId) /*&& e.subworkBackendId === backendId*/)
           : undefined;
-          // allLocal.find((e) =>{ 
-          //     console.log("Comparing local entry  Ebackend ID", e.backendId, "with item ID", itemId, "and subwork backend ID", backendId);
-          // })
-          // console.log("Existing local entry for item ID", itemId, "and subwork backend ID", backendId, "is:", existing);
+        // allLocal.find((e) =>{ 
+        //     console.log("Comparing local entry  Ebackend ID", e.backendId, "with item ID", itemId, "and subwork backend ID", backendId);
+        // })
+        // console.log("Existing local entry for item ID", itemId, "and subwork backend ID", backendId, "is:", existing);
         // allLocal.find((e) => Number(e.backendId) === Number(itemId) && e.subworkBackendId === backendId)
-      // console.log("Syncing subwork entry from server. Subwork backend ID:", backendId, "Item backend ID:", itemId, "Existing local entry:", existing);
+        // console.log("\n\nS$$$$$$$$$$$$:", await getSubworkValue(wid, "backendId"), existing);
         const base: SubworkEntryRecord = {
           id: existing?.id,
           backendId: itemId,
-          subworkBackendId: wid,
+          subworkBackendId: await getSubworkValue(wid, "backendId"),
           subworkLocalId: undefined,
           kind,
           name: String((it as any).name ?? ""),
@@ -129,7 +125,7 @@ export async function syncSubworkEntriesFromServer(wid: string) {
           unit: (it as any).unit === "CFT" ? "CFT" : (it as any).unit === "SFT" ? "SFT" : undefined,
           defaultRate: Number((it as any).defaultRate ?? 0),
           synced: true,
-          operation:"update",
+          operation: "update",
           updatedAt: Date.now(),
           deleted: false,
         };
@@ -137,8 +133,8 @@ export async function syncSubworkEntriesFromServer(wid: string) {
         bulk.push(base);
       }
     };
-    console.log(`Pushing items for subwork backend ID: ${backendId} for details `, details);
-    console.log(`Pushing items for subwork backend ID: ${backendId} for deductions}`, deductions);
+    // console.log(`Pushing items for subwork backend ID: ${backendId} for details `, details);
+    // console.log(`Pushing items for subwork backend ID: ${backendId} for deductions}`, deductions);
 
     pushItems(details, "details");
     pushItems(deductions, "deductions");
@@ -146,7 +142,7 @@ export async function syncSubworkEntriesFromServer(wid: string) {
 
   // console.log("Bulk updating subwork entries from server, total items:", bulk.length, bulk);
   if (bulk.length) {
-  await projectsDB.subworkEntries.clear();
+    await projectsDB.subworkEntries.clear();
     await projectsDB.subworkEntries.bulkPut(bulk);
   }
 
@@ -166,16 +162,26 @@ export async function syncSubworkEntriesToServer() {
   const authRole = role ?? "";
   const all = await projectsDB.subworkEntries.toArray();
 
-  const toCreate = all.filter((e) => !e.backendId && !e.deleted && e.synced === false &&e.operation=="create" && e.createSynced===false);
-  const toUpdate = all.filter((e) => e.backendId && !e.deleted && e.synced === false && e.operation=="update"&& e.createSynced==true);
-  const toDelete = all.filter((e) => e.backendId && e.deleted && e.synced === false && e.operation=="delete"&& e.createSynced==true);
+  const toCreate = all.filter((e) => !e.backendId && !e.deleted && e.synced === false && e.operation == "create" && e.createSynced === false);
+  const toUpdate = all.filter((e) => e.backendId && !e.deleted && e.synced === false && e.operation == "update" && e.createSynced == true);
+  const toDelete = all.filter((e) => e.backendId && e.deleted && e.synced === false && e.operation == "delete" && e.createSynced == true);
 
   // sync the Unit and Default Rate  to server
- 
+//  const toUpdates = all.filter(
+//   (e) =>{ 
+//     if(e.backendId && !e.deleted && e.synced === false && e.operation == "update" && e.createSynced == true){
+//       console.log(`${true} Bc`);
+//     }else{
+//       console.log(`${false} Bc`);
+//     }
+//     console.log("\n\nTo update subwork entries for unit and rate sync:", e);
+//     console.log("bakendId",e.backendId,"Deleted:", !e.deleted, "Synced", e.synced, "Operation:", e.operation, "Create Synced:", e.createSynced);
+//   });
+  
 
   // create
   // console.log("To create subwork entries on backend:", toCreate);
-  // console.log("To update subwork entries on backend:", toUpdate);
+  // console.log("To update subwork entries on backend:^^", toUpdate);
   // console.log("To delete subwork entries on backend:", toDelete);
 
   for (const e of toCreate) {
@@ -191,20 +197,25 @@ export async function syncSubworkEntriesToServer() {
         rate: e.rate,
         total: e.total,
       } as any;
-      const correspondingSubworkBackendID = await getSubworkBackendIdFromLocalId(e.subworkBackendId );
+      const correspondingSubworkBackendID = await getSubworkBackendIdFromLocalId(e.subworkBackendId);
       // console.log("Corresponding subwork backend ID for local ID", e.subworkBackendId, "is", correspondingSubworkBackendID);
       if (!correspondingSubworkBackendID) continue;
       const created = await addItems(correspondingSubworkBackendID, e.kind, [payload], authToken, authRole);
-      const createdItem = JSON.parse(created as unknown as string); 
+      const createdItem = JSON.parse(created as unknown as string);
       // console.log("Created subwork entry on backend:", createdItem);
-      console.log("local ID", e.id);
+      // console.log("local ID", e);
       await projectsDB.subworkEntries.update(e.id!, {
+        id: e.id,
         backendId: createdItem.items[0]?.id ? String(createdItem.items[0].id) : undefined,
-        subworkLocalId:e.id,
+        subworkLocalId: e.id,
         synced: true,
+        createSynced: true,
+        operation: "update",
         updatedAt: Date.now(),
       });
-    } catch(err) {
+
+      // console.log("!!!@@@@@Synced created subwork entry to local DB:\n", await projectsDB.subworkEntries.get(e.id!));
+    } catch (err) {
       console.error("Failed to create subwork entry on backend:", err);
     }
   }
@@ -223,32 +234,32 @@ export async function syncSubworkEntriesToServer() {
         rate: e.rate,
         total: e.total,
       } as any;
-      await updateItem(e.subworkBackendId, e.backendId, e.kind, payload, authToken, authRole);
+      const sbid = await getSubworkValue(e.subworkBackendId,"backendId");
+      // console.log("Updating subwork entry on backend. Subwork backend ID:", sbid, "Item backend ID:", e.backendId, "Payload:", e.subworkBackendId);
+      await updateItem(sbid,e.backendId,  e.kind, payload, authToken, authRole);
       await projectsDB.subworkEntries.update(e.id!, {
+        backendId: e.backendId,
         synced: true,
         updatedAt: Date.now(),
       });
-    } catch {
-      // keep unsynced
+    } catch (err) {
+      console.error("Failed to update subwork entry on backend:", err);
     }
   }
 
   // delete
   for (const e of toDelete) {
-    console.log("[Enter Delete] Deleting local subwork entry ID:", e.id, "with backend ID:", e.backendId);
     if (!e.subworkBackendId || !e.backendId) continue;
     try {
       const subbackendId = await getSubworkBackendIdFromLocalId(e.subworkBackendId);
-      console.log("Deleting subwork entry on backend:", e.backendId, "for subwork backend ID:", subbackendId);
       const deleteResponse = await deleteItem(String(subbackendId), e.backendId, e.kind, authToken, authRole);
-      if (!deleteResponse){
-        console.log("Delete response falsy, skipping local deletion for entry ID:", e.id);
+      if (!deleteResponse) {
         continue;
       } await projectsDB.subworkEntries.delete(e.id!);
     } catch (err) {
       console.error("Failed to delete subwork entry on backend:", e.backendId, err);
     }
-  } 
+  }
 }
 
 export async function syncUnitsToServer(wid: string) {
@@ -258,7 +269,7 @@ export async function syncUnitsToServer(wid: string) {
     "SFT": 0
   }
   const subwork = await projectsDB.subworks.where("id").equals(wid).first();
-  console.log("Fetched subwork for unit and rate sync:", subwork,wid);
+  // console.log("Fetched subwork for unit and rate sync:", subwork, wid);
   if (subwork && subwork.unit && subwork.defaultRate !== undefined) {
     console.log("Subwork to update units and rates on server:", subwork);
     switch (subwork.unit) {
@@ -278,8 +289,8 @@ export async function syncUnitsToServer(wid: string) {
 
 export async function fullSubworkEntriesSync(wid: string) {
   if (!navigator.onLine) return;
-  // await syncSubworkEntriesToServer();
-  // await syncSubworkEntriesFromServer(wid);
+  await syncSubworkEntriesToServer();
+  await syncSubworkEntriesFromServer(wid);
   await syncUnitsToServer(wid);
 }
 export async function getSubworkEntryValue(id: string, variableName: string): Promise<any> {
