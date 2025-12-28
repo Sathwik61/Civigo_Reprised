@@ -31,7 +31,7 @@ export async function updateLocalEntry(record: SubworkEntryRecord, updates: Part
   if (!record.id) return;
   const now = Date.now();
   // console.log("Updating local subwork entry ID", record.id, "with updates:", record.synced);
-  const syn = await getSubworkEntryValue(Number(record.id),"synced")
+  const syn = await getSubworkEntryValue(record.id,"synced")
   // console.log("Synced value is:", syn);
   await projectsDB.subworkEntries.update(record.id, {
     ...record,
@@ -191,7 +191,7 @@ export async function syncSubworkEntriesToServer() {
         rate: e.rate,
         total: e.total,
       } as any;
-      const correspondingSubworkBackendID = await getSubworkBackendIdFromLocalId(Number(e.subworkBackendId ));
+      const correspondingSubworkBackendID = await getSubworkBackendIdFromLocalId(e.subworkBackendId );
       // console.log("Corresponding subwork backend ID for local ID", e.subworkBackendId, "is", correspondingSubworkBackendID);
       if (!correspondingSubworkBackendID) continue;
       const created = await addItems(correspondingSubworkBackendID, e.kind, [payload], authToken, authRole);
@@ -238,7 +238,7 @@ export async function syncSubworkEntriesToServer() {
     console.log("[Enter Delete] Deleting local subwork entry ID:", e.id, "with backend ID:", e.backendId);
     if (!e.subworkBackendId || !e.backendId) continue;
     try {
-      const subbackendId = await getSubworkBackendIdFromLocalId(Number((e.subworkBackendId)));
+      const subbackendId = await getSubworkBackendIdFromLocalId(e.subworkBackendId);
       console.log("Deleting subwork entry on backend:", e.backendId, "for subwork backend ID:", subbackendId);
       const deleteResponse = await deleteItem(String(subbackendId), e.backendId, e.kind, authToken, authRole);
       if (!deleteResponse){
@@ -282,7 +282,7 @@ export async function fullSubworkEntriesSync(wid: string) {
   // await syncSubworkEntriesFromServer(wid);
   await syncUnitsToServer(wid);
 }
-export async function getSubworkEntryValue(id: number, variableName: string): Promise<any> {
+export async function getSubworkEntryValue(id: string, variableName: string): Promise<any> {
   const entry = await projectsDB.subworkEntries.get(id);
 
   if (!entry) return undefined;

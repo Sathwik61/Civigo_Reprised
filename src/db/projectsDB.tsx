@@ -29,10 +29,10 @@ export interface WorkRecord {
 }
 
 export interface SubworkRecord {
-  id?: number;               // local auto-id
+  id?: string;               // local auto-id
   backendId?: string;        // id from API when synced
   workBackendId?: string;    // backend id of parent work
-  workLocalId?: number;      // local id of parent work (fallback when offline)
+  workLocalId?: string;      // local id of parent work (fallback when offline)
   name: string;
   description?: string;
   unit?: "SFT" | "CFT";      // measurement unit per subwork
@@ -43,10 +43,10 @@ export interface SubworkRecord {
 }
 
 export interface SubworkEntryRecord {
-  id?: number;                // local auto-id
+  id?: string;                // local auto-id
   backendId?: string;         // id from API when synced (itemId)
   subworkBackendId?: string;  // backend id of parent subwork
-  subworkLocalId?: number;    // local id of parent subwork (fallback when offline)
+  subworkLocalId?: string;    // local id of parent subwork (fallback when offline)
   kind: "details" | "deductions";
   name: string;
   number: number;

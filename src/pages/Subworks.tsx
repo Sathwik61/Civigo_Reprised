@@ -11,6 +11,7 @@ import {
 } from "@/services/dbservices/subworkLocal";
 import { SubworkDialog } from "@/components/dialog/subworkDialog";
 import { ConfirmDialog } from "@/components/dialog/confirmDialog";
+import { numericId } from "@/utils/randomId";
 
 export default function Subworks() {
   const { workId } = useParams(); // backend work id
@@ -25,12 +26,12 @@ export default function Subworks() {
     let cancelled = false;
 
     async function init() {
-      const local = await getLocalSubworksForWork({ localId: Number(workId) });
+      const local = await getLocalSubworksForWork({ localId: workId });
       if (!cancelled) setSubworks(local);
 
       if (navigator.onLine) {
         await fullSubworksSync();
-        const synced = await getLocalSubworksForWork({ localId: Number(workId) });
+        const synced = await getLocalSubworksForWork({ localId: workId });
         if (!cancelled) setSubworks(synced);
       }
     }
@@ -39,7 +40,7 @@ export default function Subworks() {
 
     const onOnline = async () => {
       await fullSubworksSync();
-      const data = await getLocalSubworksForWork({ localId: Number(workId) });
+      const data = await getLocalSubworksForWork({ localId: workId });
       if (!cancelled) setSubworks(data);
     };
 
@@ -62,19 +63,20 @@ export default function Subworks() {
     } else {
       console.log("Adding local subwork for work local ID:", Number(workId));
       await addLocalSubwork({
+        id: numericId(),
         workBackendId: workId,
-        workLocalId: Number(workId),
+        workLocalId: workId,
         name: values.name,
         description: values.description,
       });
     }
 
-    const updated = await getLocalSubworksForWork({ localId: Number(workId) });
+    const updated = await getLocalSubworksForWork({ localId: workId });
     setSubworks(updated ?? []);
 
     if (navigator.onLine) {
       await fullSubworksSync();
-      const synced = await getLocalSubworksForWork({ localId: Number(workId) });
+      const synced = await getLocalSubworksForWork({ localId: workId });
       setSubworks(synced ?? []);
     }
 
@@ -89,7 +91,7 @@ export default function Subworks() {
   const handleConfirmDelete = async () => {
     if (!subworkToDelete || !subworkToDelete.id || !workId) return;
     await deleteLocalSubwork(subworkToDelete);
-    const updated = await getLocalSubworksForWork({ localId: Number(workId) });
+    const updated = await getLocalSubworksForWork({ localId: workId });
     setSubworks(updated);
     setSubworkToDelete(null);
   };
