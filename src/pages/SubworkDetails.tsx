@@ -225,7 +225,7 @@ export default function SubworkDetails() {
       const nowId = await addLocalEntry(base);
       // patch the just-created row with its Dexie id so future edits/deletes persist
       const updater = (rows: Row[]): Row[] =>
-        rows.map((r) => (r.id === tempId ? { ...r, localId: nowId as number } : r));
+        rows.map((r) => (r.id === tempId ? { ...r, localId: nowId as string } : r));
       if (type === "details") {
         setAdditions((prev) => updater(prev));
       } else {

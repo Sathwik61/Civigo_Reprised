@@ -1,7 +1,8 @@
 import { projectsDB, type ProjectRecord } from "@/db/projectsDB";
 import { createProject, listProjects, updateProject, deleteProject } from "../api/project";
+import { numericId } from "@/utils/randomId";
 
-export async function addLocalProject(p: Omit<ProjectRecord, "id" | "synced" | "updatedAt" | "backendId">) {
+export async function addLocalProject(p: Omit<ProjectRecord, "synced" | "updatedAt" | "backendId">) {
   const now = Date.now();
   const id = await projectsDB.projects.add({ ...p, synced: false, updatedAt: now });
   console.log("Saved to Dexie with id:", id);
@@ -10,21 +11,64 @@ export async function addLocalProject(p: Omit<ProjectRecord, "id" | "synced" | "
 
 export async function getAllLocalProjects(): Promise<ProjectRecord[]> {
   const all = await projectsDB.projects.orderBy("updatedAt").reverse().toArray();
-  return all.filter((p)=>!p.deleted);
+  console.log("Loaded", all.length, "projects from local DB.");
+  return all.filter((p) => !p.deleted);
 }
 
 /** Pull from backend and overwrite local cache */
 export async function syncFromServer() {
   const remote = await listProjects();
+  // console.log("Fetched", remote.length, "projects from server.");
+  const remoteIds = remote.map((p) => p.id);
+  // Remove local projects that no longer exist on backend
+  const local = await projectsDB.projects.where("backendId").anyOf(remoteIds).toArray();
+  const byRemoteId = new Map(local.map((p) => [p.backendId, p]));
+
+  const upsert = remote.map((remoteProj) => {
+    const localProj = byRemoteId.get(remoteProj.id);
+
+    if (localProj) {
+      return {
+        ...localProj,
+        remoteProj,
+        id: localProj.id,
+        backendId: remoteProj.id,
+      }
+    }
+
+    return {
+      ...remoteProj,
+      backendId: remoteProj.id,
+      id: numericId(),
+    }
+    // return {
+    //   id: localProj ? localProj.id : undefined,
+    //   backendId: remoteProj.id,
+    //   name: remoteProj.name,
+    //   description: remoteProj.description,
+    //   status: remoteProj.status ?? "Active",
+    //   clientdetails: remoteProj.clientdetails ?? ,
+    //     clientname: "",
+    //   }
+  });
+
   await projectsDB.projects.clear();
   // console.log("Syncing projects from server, got:", remote);
+  // await projectsDB.projects.bulkAdd(
+  //   remote.map((p) => ({
+  //     id: p.id,
+  //     backendId: p.id,
+  //     name: p.name,
+  //     description: p.description,
+  //     status: p.status ?? "Active",
+  //     clientdetails: p.clientdetails ?? { clientname: "", clientnumber: 0, clientaddress: "" },
+  //     synced: true,
+  //     updatedAt: Date.now(),
+  //   })),
+  // );
   await projectsDB.projects.bulkAdd(
-    remote.map((p) => ({
-      backendId: p.id,
-      name: p.name,
-      description: p.description,
-      status: p.status ?? "Active",
-      clientdetails: p.clientdetails ?? { clientname: "", clientnumber: 0, clientaddress: "" },
+    upsert.map((p) => ({
+      ...p,
       synced: true,
       updatedAt: Date.now(),
     })),
@@ -92,10 +136,25 @@ export async function fullSync() {
 }
 
 // mark a local project as deleted (soft delete until synced)
-export async function markProjectDeletedLocal(id: number) {
+export async function markProjectDeletedLocal(id: string) {
   await projectsDB.projects.update(id, {
     deleted: true,
     synced: false,
     updatedAt: Date.now(),
   });
 }
+
+export async function getProjectLocalIdFromBackendId(backendId: string): Promise<string | undefined> {
+  const record = await projectsDB.projects.where('backendId').equals(backendId).first();
+  return record?.id;
+}
+
+export async function getProjectSpecificDataFromLocalId(id: string, item: string): Promise<any> {
+  const record = await projectsDB.projects.get(id);
+  if (!record) return undefined;
+  return (record as any)[item];
+}
+// export async function getBackendIdFromProjectLocalId(backendId: string): Promise<string | undefined> {
+//   const record = await projectsDB.projects.where('id').equals(backendId).first();
+//   return record?.id;
+// }

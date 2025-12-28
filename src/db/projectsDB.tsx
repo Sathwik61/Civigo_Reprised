@@ -1,7 +1,7 @@
 import Dexie from "dexie";
 
 export interface ProjectRecord {
-  id?: number;              // local auto-id
+   id: string;              // local auto-id
   backendId?: string;       // id from API when synced
   name: string;
   description: string;
@@ -17,10 +17,10 @@ export interface ProjectRecord {
 }
 
 export interface WorkRecord {
-  id?: number;              // local auto-id
+  id?: string;              // local auto-id
   backendId?: string;       // id from API when synced
   projectBackendId?: string; // backend id of parent project
-  projectLocalId?: number;   // local id of parent project (fallback when offline)
+  projectLocalId?: string;   // local id of parent project (fallback when offline)
   name: string;
   description: string;
   synced: boolean;
@@ -66,10 +66,10 @@ export interface SubworkEntryRecord {
 }
 
 class ProjectsDB extends Dexie {
-  projects!: Dexie.Table<ProjectRecord, number>;
-  works!: Dexie.Table<WorkRecord, number>;
-  subworks!: Dexie.Table<SubworkRecord, number>;
-  subworkEntries!: Dexie.Table<SubworkEntryRecord, number>;
+  projects!: Dexie.Table<ProjectRecord, string>;
+  works!: Dexie.Table<WorkRecord, string>;
+  subworks!: Dexie.Table<SubworkRecord, string>;
+  subworkEntries!: Dexie.Table<SubworkEntryRecord, string>;
 
   constructor() {
     super("civigoProjectsDB");

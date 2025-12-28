@@ -8,6 +8,7 @@ import {
 	DialogFooter,
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
+import { numericId } from "@/utils/randomId"
 
 export interface ProjectDialogProps {
 	open: boolean
@@ -23,6 +24,7 @@ export interface ProjectDialogProps {
 		}
 	}
 	onSubmit: (project: {
+		id:string,
 		name: string
 		description: string
 		status: string
@@ -58,7 +60,9 @@ export function ProjectDialog({ open, onOpenChange, onSubmit, initialValues }: P
 		e.preventDefault()
 		setLoading(true)
 		try {
+			
 			await onSubmit({
+				id:numericId(),
 				name,
 				description,
 				status,

@@ -12,6 +12,7 @@ import {
 } from "@/services/dbservices/projectLocal";
 import { projectsDB } from "@/db/projectsDB";
 import type { ProjectRecord } from "@/db/projectsDB";
+import { numericId } from "@/utils/randomId";
 
 
 export default function Projects() {
@@ -54,6 +55,7 @@ export default function Projects() {
     }, []);
 
     const handleCreateProject = async (project: {
+        id:string,
         name: string
         description: string
         status: string
@@ -67,6 +69,7 @@ export default function Projects() {
             await projectsDB.projects.update(editingProject.id!, {
                 ...editingProject,
                 ...project,
+                id: editingProject.id,
                 clientdetails: project.clientdetails,
                 synced: false,
                 updatedAt: Date.now(),
@@ -150,8 +153,8 @@ export default function Projects() {
                                     type="button"
                                     className="text-left w-full hover:text-primary"
                                     onClick={() => {
-                                        if (!project.backendId) return;
-                                        navigate(`/projects/${project.backendId}/works`);
+                                        if (!project.id) return;
+                                        navigate(`/projects/${project.id}/works`);
                                     }}
                                 >
                                     <span>{project.name}</span>

@@ -11,6 +11,7 @@ import {
   deleteLocalWork,
   fullWorksSync,
 } from "@/services/dbservices/workLocal";
+import { numericId } from "@/utils/randomId";
 
 export default function Works() {
   const { projectId } = useParams(); // this is BACKEND project id
@@ -29,6 +30,7 @@ export default function Works() {
       if (!projectId) return;
 
       const local = await getLocalWorksForProject({ backendId: projectId });
+      console.log("Local works for project:", local);
       if (!cancelled) setWorks(local);
 
       if (navigator.onLine) {
@@ -63,15 +65,21 @@ export default function Works() {
         description: values.description,
       });
     } else {
-      await addLocalWork({
-        projectBackendId: projectId,
-        projectLocalId: undefined,
-        name: values.name,
-        description: values.description,
-      });
-      }
-
-    const updated = await getLocalWorksForProject({ backendId: projectId });
+          try{
+          await addLocalWork({ 
+              id: numericId(),   
+              backendId: undefined,
+              projectBackendId: projectId,
+              projectLocalId: undefined,
+              name: values.name,
+              deleted: false,
+              description: values.description,
+            });
+          }catch(e){
+            console.error("Error adding local work:", e);
+          }
+    }
+  const updated = await getLocalWorksForProject({ backendId: projectId });
     setWorks(updated);
 
     if (navigator.onLine) {
