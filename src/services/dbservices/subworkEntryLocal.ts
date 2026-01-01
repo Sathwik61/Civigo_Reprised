@@ -7,17 +7,13 @@ import { numericId } from "@/utils/randomId";
 export async function getLocalEntriesForSubwork(
   subworkKey: { backendId?: string; localId?: number },
   kind: "details" | "deductions",
-): Promise<SubworkEntryRecord[]> {
+): Promise<SubworkEntryRecord[]> { 
+  console.log("Fetching local entries for subwork:", subworkKey, "of kind:", kind);
   return projectsDB.subworkEntries
-    .where("subworkBackendId")
-    .equals(subworkKey.backendId ?? "")
-    .or("subworkLocalId")
-    .equals(subworkKey.localId ?? -1)
+    .where("subworkLocalId")
+    .equals(subworkKey.backendId ?? -1)
     .and((e) => e.kind === kind && !e.deleted)
-    .toArray();
-  // return projectsDB.subworkEntries
-  //   .filter((e) => (e.subworkBackendId === subworkKey.backendId || e.subworkLocalId === subworkKey.localId) && e.kind === kind && !e.deleted)
-  //   .toArray();
+    .toArray(); 
 }
 
 export async function addLocalEntry(
@@ -277,7 +273,8 @@ export async function syncSubworkEntriesToServer() {
     if (!e.subworkBackendId || !e.backendId) continue;
     try {
       const subbackendId = await getSubworkBackendIdFromLocalId(e.subworkBackendId);
-      const deleteResponse = await deleteItem(String(subbackendId), e.backendId, e.kind, authToken, authRole);
+      console.log("Deleting subwork entry on backend. Subwork backend ID:", subbackendId, "Item backend ID:", e.backendId);
+      const deleteResponse = await deleteItem(e.subworkBackendId, e.backendId, e.kind, authToken, authRole);
       if (!deleteResponse) {
         continue;
       } await projectsDB.subworkEntries.delete(e.id!);
@@ -323,4 +320,11 @@ export async function getSubworkEntryValue(id: string, variableName: string): Pr
 
   if (!entry) return undefined;
   return (entry as any)[variableName];
+}
+
+/** Get details and deductions entries for a subwork to display in UI */
+export async function getEntriesForSubworkDisplay(subworkLocalId: number) {
+  const details = await getLocalEntriesForSubwork({ localId: subworkLocalId }, "details");
+  const deductions = await getLocalEntriesForSubwork({ localId: subworkLocalId }, "deductions");
+  return { details, deductions };
 }

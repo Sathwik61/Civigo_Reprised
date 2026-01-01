@@ -89,9 +89,11 @@ export default function SubworkDetails() {
       }
       */
       // always load entries from Dexie so data is available offline
-      const localAdd = await getLocalEntriesForSubwork({ backendId: subworkId }, "details");
-      const localDed = await getLocalEntriesForSubwork({ backendId: subworkId }, "deductions");
-
+      console.log("Loading local entries for subwork:$$$$$$$$$$", subworkId);
+      const localAdd = await getLocalEntriesForSubwork({ backendId: subworkId,localId:Number(subworkId) }, "details");
+      const localDed = await getLocalEntriesForSubwork({ backendId: subworkId,localId:Number(subworkId) }, "deductions");
+      console.log("Local additions:", localAdd);
+      console.log("Local deductions:", localDed);
       const mappedAdditions: Row[] = localAdd.map((e) => ({
         id: String(e.id ?? e.backendId ?? ""),
         localId: e.id,
