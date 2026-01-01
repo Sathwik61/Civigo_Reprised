@@ -89,11 +89,11 @@ export default function SubworkDetails() {
       }
       */
       // always load entries from Dexie so data is available offline
-      console.log("Loading local entries for subwork:$$$$$$$$$$", subworkId);
+      // console.log("Loading local entries for subwork:$$$$$$$$$$", subworkId);
       const localAdd = await getLocalEntriesForSubwork({ backendId: subworkId,localId:Number(subworkId) }, "details");
       const localDed = await getLocalEntriesForSubwork({ backendId: subworkId,localId:Number(subworkId) }, "deductions");
-      console.log("Local additions:", localAdd);
-      console.log("Local deductions:", localDed);
+      // console.log("Local additions:", localAdd);
+      // console.log("Local deductions:", localDed);
       const mappedAdditions: Row[] = localAdd.map((e) => ({
         id: String(e.id ?? e.backendId ?? ""),
         localId: e.id,
@@ -133,6 +133,16 @@ export default function SubworkDetails() {
         );
         setAdditionsTotal(addTotal);
         setDeductionsTotal(dedTotal);
+      }
+
+      if(!cancelled){
+        const localSubwork = await projectsDB.subworks
+          .where("id")
+          .equals(subworkId)
+          .first();
+        if (localSubwork) {
+          setRatePerUnit(localSubwork.defaultRate ?? 0);
+        }
       }
 
       // if online, sync entries then reload
@@ -295,6 +305,7 @@ export default function SubworkDetails() {
         const updated = updatedRows.find((r) => r.id === id);
         console.log("Updated row after change:", updated, updated?.synced);
         if (updated && updated.localId != null) {
+          console.log("Persisting updated local entry:", updated);
           void updateLocalEntry(
             { id: updated.localId } as any,
             {
@@ -449,7 +460,7 @@ export default function SubworkDetails() {
                   // persist default rate for this subwork
                   if (subworkId) {
                     const localSubwork = await projectsDB.subworks
-                      .where("backendId")
+                      .where("id")
                       .equals(subworkId)
                       .first();
                     if (localSubwork) {

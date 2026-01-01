@@ -129,7 +129,7 @@ export default function Subworks() {
                 to={`/subworks/${/*subwork.backendId ??*/ subwork.id}/details`}
                 className="flex-1 text-left hover:text-primary"
               >
-                <span>{subwork.name}, {subwork.id}</span>
+                <span>{subwork.name}</span>
               </Link>
               <div className="flex items-center gap-2">
                 <Button

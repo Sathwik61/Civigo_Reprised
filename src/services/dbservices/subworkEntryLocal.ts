@@ -8,7 +8,6 @@ export async function getLocalEntriesForSubwork(
   subworkKey: { backendId?: string; localId?: number },
   kind: "details" | "deductions",
 ): Promise<SubworkEntryRecord[]> { 
-  console.log("Fetching local entries for subwork:", subworkKey, "of kind:", kind);
   return projectsDB.subworkEntries
     .where("subworkLocalId")
     .equals(subworkKey.backendId ?? -1)
@@ -27,7 +26,7 @@ export async function addLocalEntry(
 export async function updateLocalEntry(record: SubworkEntryRecord, updates: Partial<SubworkEntryRecord>) {
   if (!record.id) return;
   const now = Date.now();
-  // console.log("Updating local subwork entry ID", record.id, "with updates:", record.synced);
+  // console.log("Updating local subwork entry ID", record.id, "with updates:", record.synced,"Complete \n\n", updates);
   const syn = await getSubworkEntryValue(record.id, "createSynced")
   await projectsDB.subworkEntries.update(record.id, {
     ...record,
@@ -50,23 +49,22 @@ export async function markEntryDeletedLocal(record: SubworkEntryRecord) {
 
 /** Pull all entries from backend subworks and sync local cache */
 export async function syncSubworkEntriesFromServer(wid: string) {
-  console.log("Starting sync of subwork entries from server...");
   wid = wid ?? "";
   const { token, role } = useAuthStore.getState();
   const authToken = token ?? "";
   const authRole = role ?? "";
-  console.log("Fetching remote subworks...");
+  // console.log("Fetching remote subworks...");
   const response = await listSubworks(authToken, authRole, wid);
   let remoteSubworks: RemoteSubwork[] = [];
   if (Array.isArray(response)) {
     remoteSubworks = response;
-    console.log("Remote subworks fetched as array.");
+    // console.log("Remote subworks fetched as array.");
   } else if (typeof response === 'string') {
     try {
       const parsed = JSON.parse(response);
       if (Array.isArray(parsed)) {
         remoteSubworks = parsed;
-        console.log("Remote subworks parsed from JSON string.");
+        // console.log("Remote subworks parsed from JSON string.");
       } else {
         console.error("Parsed response is not an array:", parsed);
       }
@@ -75,24 +73,24 @@ export async function syncSubworkEntriesFromServer(wid: string) {
     }
   } else if (typeof response === 'object' && response !== null && Array.isArray((response as any).subworks)) {
     remoteSubworks = (response as any).subworks;
-    console.log("Extracted remote subworks from response object.");
+    // console.log("Extracted remote subworks from response object.");
   } else {
     console.error("Unexpected response format for remoteSubworks:", response);
   }
 
-  console.log("\n\n",Array.isArray(remoteSubworks), remoteSubworks.length)
+  // console.log("\n\n",Array.isArray(remoteSubworks), remoteSubworks.length)
 
-  console.log("Fetching all local subwork entries...");
+  // console.log("Fetching all local subwork entries...");
   const allLocal = await projectsDB.subworkEntries.toArray();
-  console.log("Fetched local entries:", allLocal.length, "entries");
+  // console.log("Fetched local entries:", allLocal.length, "entries");
 
   // Collect all remote item backendIds
-  console.log("Collecting remote item IDs...");
+  // console.log("Collecting remote item IDs...");
   const remoteItemIds = new Set<string>();
   for (const s of remoteSubworks) {
     const details: ItemPayload[] = Array.isArray(s.details) ? s.details : [];
     const deductions: ItemPayload[] = Array.isArray(s.deductions) ? s.deductions : [];
-    console.log(`Subwork ${s.id}: ${details.length} details, ${deductions.length} deductions\n\n ${s}`);
+    // console.log(`Subwork ${s.id}: ${details.length} details, ${deductions.length} deductions\n\n ${s}`);
     for (const it of [...details, ...deductions]) {
       const itemId = it.id ? String(it.id) : undefined;
       if (itemId) {
@@ -101,12 +99,12 @@ export async function syncSubworkEntriesFromServer(wid: string) {
     }
   }
 
-  console.log("Processing remote subworks to create upsert entries...");
+  // console.log("Processing remote subworks to create upsert entries...");
   const upsert = await Promise.all(remoteSubworks.map(async (remoteSubwork) => {
     const backendId = remoteSubwork.id;
-    console.log(`Processing subwork ${backendId}...`);
+    // console.log(`Processing subwork ${backendId}...`);
     const localSubworkId = await getSubworkLocalIdFromBackendId(backendId);
-    console.log(`Local subwork ID for ${backendId}: ${localSubworkId}`);
+    //  console.log(`Local subwork ID for ${backendId}: ${localSubworkId}`);
     const details: ItemPayload[] = Array.isArray(remoteSubwork.details) ? remoteSubwork.details : [];
     const deductions: ItemPayload[] = Array.isArray(remoteSubwork.deductions) ? remoteSubwork.deductions : [];
 
@@ -114,14 +112,14 @@ export async function syncSubworkEntriesFromServer(wid: string) {
       ...details.map(it => ({ ...it, kind: 'details' as const })),
       ...deductions.map(it => ({ ...it, kind: 'deductions' as const }))
     ];
-    console.log(`Total items for subwork ${backendId}: ${items.length}`);
+    // console.log(` Total items for subwork ${backendId}: ${items.length}`);
 
     return items.map(it => {
       const itemId = it.id ? String(it.id) : undefined;
       const existing = itemId
         ? allLocal.find((e) => e.backendId === itemId && e.subworkBackendId === backendId)
         : undefined;
-      console.log(`Item ${itemId}: existing local entry? ${!!existing}`);
+      // console.log(`Item ${itemId}: existing local entry? ${!!existing}`);
       return {
         id: numericId(),
         backendId: itemId,
@@ -256,8 +254,8 @@ export async function syncSubworkEntriesToServer() {
         total: e.total,
       } as any;
       const sbid = await getSubworkValue(e.subworkBackendId,"backendId");
-      // console.log("Updating subwork entry on backend. Subwork backend ID:", sbid, "Item backend ID:", e.backendId, "Payload:", e.subworkBackendId);
-      await updateItem(sbid,e.backendId,  e.kind, payload, authToken, authRole);
+      console.log("Updating subwork entry on backend. Subwork backend ID:", sbid, "Item backend ID:", e.backendId, "Payload:", e.subworkBackendId);
+      await updateItem(e.subworkBackendId,e.backendId,  e.kind, payload, authToken, authRole);
       await projectsDB.subworkEntries.update(e.id!, {
         backendId: e.backendId,
         synced: true,
