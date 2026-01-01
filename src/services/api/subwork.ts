@@ -10,6 +10,13 @@ export interface SubworkPayload {
 export interface Subwork extends SubworkPayload {
   id: string;
 }
+export interface RemoteSubwork {
+  id: string;
+  wid: string;
+  name: string;
+  details?: ItemPayload[];
+  deductions?: ItemPayload[];
+}
 
 export interface ItemPayload {
   id: string;
@@ -100,10 +107,12 @@ export async function deleteSubwork(
 export async function listSubworks(
   token: string,
   role: string,
-): Promise<Subwork[]> {
+  wid?: string,
+): Promise<RemoteSubwork[]> {
   const createdBy = getIdFromJwt(token || "") || "unknown";
   
-  return apiFetch<Subwork[]>("/subwork/all-subworks", {
+  const url = wid ? `/subwork/all-subworks?wid=${encodeURIComponent(wid)}` : "/subwork/all-subworks";
+  return apiFetch<RemoteSubwork[]>(url, {
     method: "GET",
     auth: true,
     headers: {

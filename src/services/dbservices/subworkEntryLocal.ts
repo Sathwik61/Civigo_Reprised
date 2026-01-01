@@ -1,7 +1,8 @@
 import { projectsDB, type SubworkEntryRecord } from "@/db/projectsDB";
-import { addItems, deleteItem, listSubworks, updateItem, type ItemPayload } from "@/services/api/subwork";
+import { addItems, deleteItem, listSubworks, updateItem, type ItemPayload, type RemoteSubwork } from "@/services/api/subwork";
 import { useAuthStore } from "@/zustand/useAuthStore";
-import { getSubworkBackendIdFromLocalId, getSubworkValue } from "./subworkLocal";
+import { getSubworkBackendIdFromLocalId, getSubworkLocalIdFromBackendId, getSubworkValue } from "./subworkLocal";
+import { numericId } from "@/utils/randomId";
 
 export async function getLocalEntriesForSubwork(
   subworkKey: { backendId?: string; localId?: number },
@@ -58,101 +59,125 @@ export async function syncSubworkEntriesFromServer(wid: string) {
   const { token, role } = useAuthStore.getState();
   const authToken = token ?? "";
   const authRole = role ?? "";
-  const remoteSubworks = await listSubworks(authToken, authRole);
-  
-  console.log("thstsbsdy \n\n", remoteSubworks);
+  console.log("Fetching remote subworks...");
+  const response = await listSubworks(authToken, authRole, wid);
+  let remoteSubworks: RemoteSubwork[] = [];
+  if (Array.isArray(response)) {
+    remoteSubworks = response;
+    console.log("Remote subworks fetched as array.");
+  } else if (typeof response === 'string') {
+    try {
+      const parsed = JSON.parse(response);
+      if (Array.isArray(parsed)) {
+        remoteSubworks = parsed;
+        console.log("Remote subworks parsed from JSON string.");
+      } else {
+        console.error("Parsed response is not an array:", parsed);
+      }
+    } catch (e) {
+      console.error("Failed to parse response string:", e);
+    }
+  } else if (typeof response === 'object' && response !== null && Array.isArray((response as any).subworks)) {
+    remoteSubworks = (response as any).subworks;
+    console.log("Extracted remote subworks from response object.");
+  } else {
+    console.error("Unexpected response format for remoteSubworks:", response);
+  }
+
+  console.log("\n\n",Array.isArray(remoteSubworks), remoteSubworks.length)
+
+  console.log("Fetching all local subwork entries...");
   const allLocal = await projectsDB.subworkEntries.toArray();
+  console.log("Fetched local entries:", allLocal.length, "entries");
 
   // Collect all remote item backendIds
-// $$$
-  const remoteSIds = remoteSubworks.map(r=>r.id);
-  const existing = await projectsDB.subworks.where("backendId").anyOf(remoteSIds).toArray();
-// $$$
+  console.log("Collecting remote item IDs...");
   const remoteItemIds = new Set<string>();
-  const jsonRemoteData = JSON.parse(remoteSubworks.toString());
-  for (const s of jsonRemoteData as any[]) {
-    const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
-    const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
+  for (const s of remoteSubworks) {
+    const details: ItemPayload[] = Array.isArray(s.details) ? s.details : [];
+    const deductions: ItemPayload[] = Array.isArray(s.deductions) ? s.deductions : [];
+    console.log(`Subwork ${s.id}: ${details.length} details, ${deductions.length} deductions\n\n ${s}`);
     for (const it of [...details, ...deductions]) {
-      const itemId = (it as any).id ? String((it as any).id) : undefined;
+      const itemId = it.id ? String(it.id) : undefined;
       if (itemId) {
         remoteItemIds.add(itemId);
       }
     }
   }
-  // console.log("@#Entered", remoteItemIds);
 
+  console.log("Processing remote subworks to create upsert entries...");
+  const upsert = await Promise.all(remoteSubworks.map(async (remoteSubwork) => {
+    const backendId = remoteSubwork.id;
+    console.log(`Processing subwork ${backendId}...`);
+    const localSubworkId = await getSubworkLocalIdFromBackendId(backendId);
+    console.log(`Local subwork ID for ${backendId}: ${localSubworkId}`);
+    const details: ItemPayload[] = Array.isArray(remoteSubwork.details) ? remoteSubwork.details : [];
+    const deductions: ItemPayload[] = Array.isArray(remoteSubwork.deductions) ? remoteSubwork.deductions : [];
 
-  const bulk: SubworkEntryRecord[] = [];
-  for (const s of jsonRemoteData as any[]) {
-    const backendId = String(s.id);
-    const details: ItemPayload[] = (s.details as ItemPayload[] | undefined) ?? [];
-    // console.log("Details items for subwork", details, ": ");
-    const deductions: ItemPayload[] = (s.deductions as ItemPayload[] | undefined) ?? [];
-    // console.log(`Processing subwork ${backendId}: details=${details.length}, deductions=${deductions.length}`);
+    const items = [
+      ...details.map(it => ({ ...it, kind: 'details' as const })),
+      ...deductions.map(it => ({ ...it, kind: 'deductions' as const }))
+    ];
+    console.log(`Total items for subwork ${backendId}: ${items.length}`);
 
-    const pushItems = async (items: ItemPayload[], kind: "details" | "deductions") => {
-      // console.log(`Processing ${kind} for subwork ${backendId}: ${items.length} items`);
-      if (items.length > 0) {
-        // console.log("First item in array:", items[0]);
-      }
-      for (const it of items) {
-        const itemId = (it as any).id ? String((it as any).id) : undefined;
-        const existing = itemId
-          ? allLocal.find((e) => Number(e.backendId) === Number(itemId) /*&& e.subworkBackendId === backendId*/)
-          : undefined;
-        // allLocal.find((e) =>{ 
-        //     console.log("Comparing local entry  Ebackend ID", e.backendId, "with item ID", itemId, "and subwork backend ID", backendId);
-        // })
-        // console.log("Existing local entry for item ID", itemId, "and subwork backend ID", backendId, "is:", existing);
-        // allLocal.find((e) => Number(e.backendId) === Number(itemId) && e.subworkBackendId === backendId)
-        // console.log("\n\nS$$$$$$$$$$$$:", await getSubworkValue(wid, "backendId"), existing);
-        const base: SubworkEntryRecord = {
-          id: existing?.id,
-          backendId: itemId,
-          subworkBackendId: await getSubworkValue(wid, "backendId"),
-          subworkLocalId: undefined,
-          kind,
-          name: String((it as any).name ?? ""),
-          number: Number((it as any).number ?? 0),
-          length: Number((it as any).length ?? 0),
-          breadth: Number((it as any).breadth ?? 0),
-          depth: Number((it as any).depth ?? 0),
-          quantity: Number((it as any).quantity ?? 0),
-          rate: Number((it as any).rate ?? 0),
-          createSynced: true,
-          total: Number((it as any).total ?? 0),
-          unit: (it as any).unit === "CFT" ? "CFT" : (it as any).unit === "SFT" ? "SFT" : undefined,
-          defaultRate: Number((it as any).defaultRate ?? 0),
-          synced: true,
-          operation: "update",
-          updatedAt: Date.now(),
-          deleted: false,
-        };
-        // console.log("Prepared subwork entry for bulk put:", base);
-        bulk.push(base);
-      }
-    };
-    // console.log(`Pushing items for subwork backend ID: ${backendId} for details `, details);
-    // console.log(`Pushing items for subwork backend ID: ${backendId} for deductions}`, deductions);
+    return items.map(it => {
+      const itemId = it.id ? String(it.id) : undefined;
+      const existing = itemId
+        ? allLocal.find((e) => e.backendId === itemId && e.subworkBackendId === backendId)
+        : undefined;
+      console.log(`Item ${itemId}: existing local entry? ${!!existing}`);
+      return {
+        id: numericId(),
+        backendId: itemId,
+        subworkBackendId: backendId,
+        subworkLocalId: localSubworkId,
+        kind: it.kind,
+        name: String(it.name ?? ""),
+        number: Number(it.number ?? 0),
+        length: Number(it.length ?? 0),
+        breadth: Number(it.breadth ?? 0),
+        depth: Number(it.depth ?? 0),
+        quantity: Number(it.quantity ?? 0),
+        rate: Number((it as any).rate ?? 0),
+        createSynced: true,
+        total: Number((it as any).total ?? 0),
+        unit: (it as any).unit === "CFT" ? "CFT" :  "SFT" ,
+        defaultRate: Number((it as any).defaultRate ?? 0),
+        synced: true,
+        operation: "update",
+        updatedAt: Date.now(),
+        deleted: false,
+      } as SubworkEntryRecord;
+    });
+  }));
 
-    pushItems(details, "details");
-    pushItems(deductions, "deductions");
-  }
+  const flatUpsert = upsert.flat();
+  console.log("Flattened upsert entries:", flatUpsert.length, "entries");
 
-  // console.log("Bulk updating subwork entries from server, total items:", bulk.length, bulk);
-  if (bulk.length) {
+  // console.log("Bulk updating subwork entries from server, total items:", flatUpsert.length, flatUpsert);
+  if (flatUpsert.length) {
+    console.log("Clearing local subwork entries table...");
     await projectsDB.subworkEntries.clear();
-    await projectsDB.subworkEntries.bulkPut(bulk);
+    console.log("Bulk putting upsert entries...");
+    await projectsDB.subworkEntries.bulkPut(flatUpsert);
+    console.log("Bulk put completed.");
+  } else {
+    console.log("No entries to upsert.");
   }
 
   // Delete local synced entries not present on server
+  console.log("Checking for local entries to delete...");
+  let deletedCount = 0;
   for (const local of allLocal) {
     // console.log("Checking local entry for deletion:", local);
     if (local.synced && local.backendId && !remoteItemIds.has(local.backendId)) {
+      console.log(`Deleting local entry ${local.id} (backendId: ${local.backendId})`);
       await projectsDB.subworkEntries.delete(local.id!);
+      deletedCount++;
     }
   }
+  console.log(`Deleted ${deletedCount} local entries not present on server.`);
+  console.log("Sync of subwork entries from server completed.");
 }
 
 /** Push local changes (create/update/delete) to backend for all subworks */
