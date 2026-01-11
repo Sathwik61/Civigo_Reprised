@@ -142,6 +142,8 @@ export default function SubworkDetails() {
           .first();
         if (localSubwork) {
           setRatePerUnit(localSubwork.defaultRate ?? 0);
+          console.log("Local subwork unit: %%", localSubwork.unit);
+          setUnit(localSubwork.unit ? localSubwork.unit:"SFT");
         }
       }
 
@@ -425,10 +427,11 @@ export default function SubworkDetails() {
                 value={unit}
                 onChange={async (e) => {
                   const next = e.target.value as "SFT" | "CFT";
+                  console.log("Changing unit to:", next, "Subwork ID", subworkId);
                   setUnit(next);
                   if (subworkId) {
                     const localSubwork = await projectsDB.subworks
-                      .where("backendId")
+                      .where("id")
                       .equals(subworkId)
                       .first();
                     if (localSubwork) {
